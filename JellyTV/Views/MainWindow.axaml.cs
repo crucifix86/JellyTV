@@ -361,20 +361,6 @@ StartupNotify=false";
             }
         }
 
-        // Ensure window is activated before any navigation
-        try
-        {
-            var processInfo = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "wmctrl",
-                Arguments = "-a JellyTV",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            System.Diagnostics.Process.Start(processInfo);
-        }
-        catch { }
-
         // Get the currently focused element
         var focusManager = TopLevel.GetTopLevel(this)?.FocusManager;
         var focused = focusManager?.GetFocusedElement() as Control;
@@ -386,11 +372,20 @@ StartupNotify=false";
 
         if (focused == null)
         {
-            // Nothing focused, focus the first toolbar button
-            Console.WriteLine("No focus - trying to focus HomeButton");
-            var homeButton = this.FindControl<Button>("HomeButton");
-            homeButton?.Focus();
-            Console.WriteLine($"HomeButton focus attempted: {homeButton != null}");
+            // Nothing focused, find the first visible focusable button
+            Console.WriteLine("No focus - finding first visible button");
+            var allButtons = GetAllFocusableButtons(this);
+            var firstVisibleButton = allButtons.FirstOrDefault(b => b.IsVisible && b.IsEffectivelyVisible);
+
+            if (firstVisibleButton != null)
+            {
+                firstVisibleButton.Focus();
+                Console.WriteLine($"Focused first visible button: {firstVisibleButton.GetType().Name}");
+            }
+            else
+            {
+                Console.WriteLine("No visible buttons found");
+            }
             return;
         }
 
