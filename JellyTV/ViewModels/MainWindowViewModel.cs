@@ -14,9 +14,13 @@ namespace JellyTV.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly JellyfinClient _jellyfinClient;
+    private readonly MediaPlayerService _mediaPlayer;
 
     [ObservableProperty]
-    private string _serverUrl = "http://";
+    private string _serverAddress = "";
+
+    [ObservableProperty]
+    private string _serverPort = "8096";
 
     [ObservableProperty]
     private string _username = "";
@@ -57,9 +61,84 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<BaseItemDto> _episodes = new();
 
+    [ObservableProperty]
+    private bool _isPlaying;
+
     public MainWindowViewModel()
     {
         _jellyfinClient = new JellyfinClient();
+        _mediaPlayer = new MediaPlayerService();
+
+        // Load saved credentials
+        LoadCredentials();
+    }
+
+    private void LoadCredentials()
+    {
+        try
+        {
+            var configPath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "JellyTV",
+                "config.json"
+            );
+
+            if (System.IO.File.Exists(configPath))
+            {
+                var json = System.IO.File.ReadAllText(configPath);
+                var config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                if (config != null)
+                {
+                    if (config.ContainsKey("ServerAddress")) ServerAddress = config["ServerAddress"];
+                    if (config.ContainsKey("ServerPort")) ServerPort = config["ServerPort"];
+                    if (config.ContainsKey("Username")) Username = config["Username"];
+                    if (config.ContainsKey("AccessToken") && config.ContainsKey("UserId"))
+                    {
+                        // Auto-login with saved token
+                        _jellyfinClient.SetServer($"http://{ServerAddress}:{ServerPort}");
+                        _jellyfinClient.SetAccessToken(config["AccessToken"], config["UserId"]);
+                        IsAuthenticated = true;
+                        Task.Run(async () => await LoadHomeDataAsync());
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading credentials: {ex.Message}");
+        }
+    }
+
+    private void SaveCredentials(string accessToken, string userId)
+    {
+        try
+        {
+            var configDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "JellyTV"
+            );
+
+            System.IO.Directory.CreateDirectory(configDir);
+
+            var config = new Dictionary<string, string>
+            {
+                ["ServerAddress"] = ServerAddress,
+                ["ServerPort"] = ServerPort,
+                ["Username"] = Username,
+                ["AccessToken"] = accessToken,
+                ["UserId"] = userId
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(config);
+            var configPath = System.IO.Path.Combine(configDir, "config.json");
+            System.IO.File.WriteAllText(configPath, json);
+
+            Console.WriteLine($"Credentials saved to {configPath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving credentials: {ex.Message}");
+        }
     }
 
     [RelayCommand]
@@ -191,34 +270,41 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         StatusMessage = null;
 
-        if (string.IsNullOrWhiteSpace(ServerUrl) || string.IsNullOrWhiteSpace(Username))
+        if (string.IsNullOrWhiteSpace(ServerAddress) || string.IsNullOrWhiteSpace(Username))
         {
-            StatusMessage = "Please enter server URL and username";
+            StatusMessage = "Please enter server address and username";
             return;
         }
 
         try
         {
-            Console.WriteLine($"Connecting to {ServerUrl} as {Username}");
-            _jellyfinClient.SetServer(ServerUrl);
+            var serverUrl = $"http://{ServerAddress}:{ServerPort}";
+            Console.WriteLine($"Connecting to {serverUrl} as {Username}");
+            _jellyfinClient.SetServer(serverUrl);
 
             Console.WriteLine("Getting server info...");
             var serverInfo = await _jellyfinClient.GetServerInfoAsync();
             if (serverInfo == null)
             {
-                StatusMessage = "Could not connect to server. Check the URL and try again.";
+                StatusMessage = "Could not connect to server. Check the address and port.";
+                Console.WriteLine($"ERROR: Could not connect to server {serverUrl}");
                 return;
             }
 
             Console.WriteLine($"Server found: {serverInfo.ServerName}");
             var authResult = await _jellyfinClient.AuthenticateAsync(Username, Password);
-            if (authResult?.AccessToken == null)
+            if (authResult?.AccessToken == null || authResult.User?.Id == null)
             {
                 StatusMessage = "Authentication failed. Check your credentials.";
+                Console.WriteLine($"ERROR: Authentication failed for user {Username}");
                 return;
             }
 
             Console.WriteLine("Authentication successful!");
+
+            // Save credentials for auto-login
+            SaveCredentials(authResult.AccessToken, authResult.User.Id);
+
             IsAuthenticated = true;
             await LoadHomeDataAsync();
             Console.WriteLine("Home data loaded!");
@@ -307,5 +393,26 @@ public partial class MainWindowViewModel : ViewModelBase
                 Console.WriteLine($"Created row '{row.Title}' with {row.Items.Count} items");
             }
         }
+    }
+
+    [RelayCommand]
+    private void PlayItem(BaseItemDto? item)
+    {
+        // Use the passed item if available, otherwise fall back to SelectedItem
+        var itemToPlay = item ?? SelectedItem;
+
+        if (itemToPlay?.Id == null)
+        {
+            Console.WriteLine("No item to play");
+            return;
+        }
+
+        // Build the media URL from Jellyfin
+        var mediaUrl = _jellyfinClient.GetStreamUrl(itemToPlay.Id);
+        Console.WriteLine($"Playing: {itemToPlay.Name}");
+        Console.WriteLine($"URL: {mediaUrl}");
+
+        IsPlaying = true;
+        _mediaPlayer.PlayMedia(mediaUrl);
     }
 }

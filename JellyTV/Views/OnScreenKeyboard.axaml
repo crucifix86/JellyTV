@@ -1,0 +1,102 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="400"
+             x:Class="JellyTV.Views.OnScreenKeyboard">
+
+    <UserControl.Styles>
+        <Style Selector="Button">
+            <Setter Property="Background" Value="#FF3A3A3A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button:focus">
+            <Setter Property="Background" Value="#FF00A4DC"/>
+            <Setter Property="BorderBrush" Value="#FFFFFFFF"/>
+            <Setter Property="BorderThickness" Value="3"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="#EE000000" Padding="20" CornerRadius="10">
+        <StackPanel Spacing="8">
+            <!-- Input display -->
+            <Border Background="#FF2A2A2A" CornerRadius="6" Padding="12" Margin="0,0,0,10">
+                <TextBlock Name="InputDisplay"
+                          FontSize="20"
+                          Foreground="White"
+                          TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- Row 1: Numbers -->
+            <WrapPanel Name="Row1" HorizontalAlignment="Center" Margin="0,3">
+                <Button Content="1" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="1"/>
+                <Button Content="2" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="2"/>
+                <Button Content="3" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="3"/>
+                <Button Content="4" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="4"/>
+                <Button Content="5" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="5"/>
+                <Button Content="6" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="6"/>
+                <Button Content="7" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="7"/>
+                <Button Content="8" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="8"/>
+                <Button Content="9" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="9"/>
+                <Button Content="0" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="0"/>
+                <Button Content="-" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="-"/>
+                <Button Content="." Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="."/>
+                <Button Content=":" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag=":"/>
+                <Button Content="/" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="/"/>
+            </WrapPanel>
+
+            <!-- Row 2: QWERTY -->
+            <WrapPanel Name="Row2" HorizontalAlignment="Center" Margin="0,3">
+                <Button Content="Q" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="Q"/>
+                <Button Content="W" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="W"/>
+                <Button Content="E" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="E"/>
+                <Button Content="R" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="R"/>
+                <Button Content="T" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="T"/>
+                <Button Content="Y" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="Y"/>
+                <Button Content="U" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="U"/>
+                <Button Content="I" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="I"/>
+                <Button Content="O" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="O"/>
+                <Button Content="P" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="P"/>
+            </WrapPanel>
+
+            <!-- Row 3: ASDF -->
+            <WrapPanel Name="Row3" HorizontalAlignment="Center" Margin="0,3">
+                <Button Content="A" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="A"/>
+                <Button Content="S" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="S"/>
+                <Button Content="D" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="D"/>
+                <Button Content="F" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="F"/>
+                <Button Content="G" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="G"/>
+                <Button Content="H" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="H"/>
+                <Button Content="J" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="J"/>
+                <Button Content="K" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="K"/>
+                <Button Content="L" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="L"/>
+            </WrapPanel>
+
+            <!-- Row 4: ZXCV -->
+            <WrapPanel Name="Row4" HorizontalAlignment="Center" Margin="0,3">
+                <Button Content="Z" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="Z"/>
+                <Button Content="X" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="X"/>
+                <Button Content="C" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="C"/>
+                <Button Content="V" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="V"/>
+                <Button Content="B" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="B"/>
+                <Button Content="N" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="N"/>
+                <Button Content="M" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="M"/>
+                <Button Content="_" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="_"/>
+                <Button Content="@" Width="50" Height="50" Margin="3" FontSize="18" Foreground="White" Tag="@"/>
+            </WrapPanel>
+
+            <!-- Row 5: Special keys -->
+            <WrapPanel Name="Row5" HorizontalAlignment="Center" Margin="0,3">
+                <Button Name="ShiftButton" Content="⇧ SHIFT" Width="100" Height="50" Margin="3" FontSize="14" Foreground="White" Tag="SHIFT"/>
+                <Button Name="SpaceButton" Content="SPACE" Width="250" Height="50" Margin="3" FontSize="14" Foreground="White" Tag="SPACE"/>
+                <Button Name="BackspaceButton" Content="⌫ BACK" Width="100" Height="50" Margin="3" FontSize="14" Foreground="White" Tag="BACKSPACE"/>
+                <Button Name="DoneButton" Content="✓ DONE" Width="100" Height="50" Margin="3" FontSize="14" Foreground="White" Background="#FF00A4DC" Tag="DONE"/>
+            </WrapPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

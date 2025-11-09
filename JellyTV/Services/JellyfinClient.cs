@@ -53,6 +53,15 @@ public class JellyfinClient
         }
     }
 
+    public void SetAccessToken(string accessToken, string userId)
+    {
+        _accessToken = accessToken;
+        _userId = userId;
+        _httpClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("MediaBrowser", $"Token=\"{_accessToken}\"");
+        Console.WriteLine($"Access token set for user: {userId}");
+    }
+
     public async Task<ServerInfo?> GetServerInfoAsync()
     {
         try
@@ -234,8 +243,10 @@ public class JellyfinClient
 
     public string? GetStreamUrl(string itemId)
     {
-        if (string.IsNullOrEmpty(_serverUrl) || !IsAuthenticated) return null;
-        return $"{_serverUrl}/Videos/{itemId}/stream?api_key={_accessToken}&Static=true";
+        if (string.IsNullOrEmpty(_serverUrl) || !IsAuthenticated || string.IsNullOrEmpty(_userId)) return null;
+
+        // Use proper Jellyfin streaming URL with direct play
+        return $"{_serverUrl}/Items/{itemId}/Download?api_key={_accessToken}";
     }
 
     public async Task<Bitmap?> LoadImageAsync(string itemId, string imageType = "Primary", int? width = null, int? height = null)
