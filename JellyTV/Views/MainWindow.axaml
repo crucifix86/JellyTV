@@ -1,0 +1,564 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:JellyTV.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1920" d:DesignHeight="1080"
+        x:Class="JellyTV.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="JellyTV"
+        Width="1920"
+        Height="1080"
+        WindowState="Maximized"
+        Background="#FF0F0F0F">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Window.Styles>
+        <!-- TV-optimized styles with 10-foot viewing in mind -->
+        <Style Selector="Button">
+            <Setter Property="FontSize" Value="28"/>
+            <Setter Property="Padding" Value="30,15"/>
+            <Setter Property="MinHeight" Value="60"/>
+            <Setter Property="Background" Value="#FF1F1F1F"/>
+            <Setter Property="Foreground" Value="#FFEEEEEE"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+
+        <Style Selector="Button:pointerover">
+            <Setter Property="Background" Value="#FF2A2A2A"/>
+        </Style>
+
+        <Style Selector="Button:focus">
+            <Setter Property="Background" Value="#FF00A4DC"/>
+            <Setter Property="BorderBrush" Value="#FF00D9FF"/>
+            <Setter Property="BorderThickness" Value="4"/>
+        </Style>
+
+        <Style Selector="Button.toolbar-button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="25,12"/>
+        </Style>
+
+        <Style Selector="Button.toolbar-button:focus">
+            <Setter Property="Background" Value="#FF00A4DC"/>
+            <Setter Property="BorderThickness" Value="0,0,0,4"/>
+            <Setter Property="BorderBrush" Value="#FF00D9FF"/>
+        </Style>
+
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontSize" Value="48"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style Selector="TextBlock.heading">
+            <Setter Property="FontSize" Value="32"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style Selector="TextBlock.body">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="Foreground" Value="#FFCCCCCC"/>
+        </Style>
+
+        <Style Selector="Border.media-card">
+            <Setter Property="Background" Value="#FF2A2A2A"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+
+        <Style Selector="Border.media-card:pointerover">
+            <Setter Property="Background" Value="#FF353535"/>
+        </Style>
+
+        <Style Selector="Border.media-card:focus">
+            <Setter Property="BorderBrush" Value="#FF00D9FF"/>
+            <Setter Property="BorderThickness" Value="4"/>
+        </Style>
+
+        <Style Selector="Grid:pointerover Button#ScrollLeftButton">
+            <Setter Property="Opacity" Value="0.8"/>
+        </Style>
+        <Style Selector="Grid:pointerover Button#ScrollRightButton">
+            <Setter Property="Opacity" Value="0.8"/>
+        </Style>
+        <Style Selector="Button#ScrollLeftButton:pointerover">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Button#ScrollRightButton:pointerover">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid>
+        <!-- Login Screen (when not authenticated) -->
+        <Border IsVisible="{Binding !IsAuthenticated}"
+                Background="#FF1A1A1A"
+                CornerRadius="12"
+                Padding="60"
+                MaxWidth="800"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <StackPanel Spacing="30">
+                <TextBlock Text="Connect to Jellyfin Server" Classes="heading"/>
+
+                <TextBox Name="ServerUrlTextBox"
+                        Watermark="Server URL (e.g., http://192.168.1.100:8096)"
+                        FontSize="24"
+                        Padding="20"
+                        MinHeight="60"
+                        Text="{Binding ServerUrl}"/>
+
+                <TextBox Name="UsernameTextBox"
+                        Watermark="Username"
+                        FontSize="24"
+                        Padding="20"
+                        MinHeight="60"
+                        Text="{Binding Username}"/>
+
+                <TextBox Name="PasswordTextBox"
+                        Watermark="Password"
+                        PasswordChar="•"
+                        FontSize="24"
+                        Padding="20"
+                        MinHeight="60"
+                        Text="{Binding Password}"/>
+
+                <Button Content="Connect"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ConnectCommand}"/>
+
+                <TextBlock Text="{Binding StatusMessage}"
+                          Classes="body"
+                          Foreground="#FFFF5555"
+                          IsVisible="{Binding !!StatusMessage}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Home Screen (when authenticated) - TV App Layout -->
+        <Grid IsVisible="{Binding IsAuthenticated}" RowDefinitions="Auto,*">
+
+        <!-- Main Home View -->
+        <Grid IsVisible="{Binding !ShowDetailView}" RowDefinitions="Auto,*" Grid.RowSpan="2">
+        <!-- Horizontal Toolbar with Library Tiles -->
+        <Border Grid.Row="0" Background="#FF151515" BorderBrush="#FF333333" BorderThickness="0,0,0,2" Padding="30,20">
+            <Grid>
+                <ScrollViewer Name="LibraryScrollViewer"
+                             HorizontalScrollBarVisibility="Hidden"
+                             VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Spacing="30">
+                        <!-- JellyTV Logo/Title -->
+                        <TextBlock Text="JellyTV"
+                                  FontSize="42"
+                                  FontWeight="Bold"
+                                  Foreground="White"
+                                  VerticalAlignment="Center"
+                                  Margin="10,0,30,0"/>
+
+                        <!-- Home Button -->
+                        <Button Classes="toolbar-button" Command="{Binding GoBackToHomeCommand}">
+                            <TextBlock Text="Home" FontSize="24" FontWeight="SemiBold"/>
+                        </Button>
+
+                        <!-- Library Tiles with 2x2 Preview Grid -->
+                        <ItemsControl ItemsSource="{Binding Libraries}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="25"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Padding="0" Background="Transparent" BorderThickness="0">
+                                        <Border CornerRadius="10" ClipToBounds="True" Width="240" Height="160">
+                                            <Grid>
+                                                <!-- 2x2 Grid of Preview Images -->
+                                                <Grid RowDefinitions="*,*" ColumnDefinitions="*,*">
+                                                    <Image Grid.Row="0" Grid.Column="0"
+                                                           Source="{Binding LibraryPreviewImages[0]}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding !!LibraryPreviewImages[0]}"/>
+                                                    <Image Grid.Row="0" Grid.Column="1"
+                                                           Source="{Binding LibraryPreviewImages[1]}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding !!LibraryPreviewImages[1]}"/>
+                                                    <Image Grid.Row="1" Grid.Column="0"
+                                                           Source="{Binding LibraryPreviewImages[2]}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding !!LibraryPreviewImages[2]}"/>
+                                                    <Image Grid.Row="1" Grid.Column="1"
+                                                           Source="{Binding LibraryPreviewImages[3]}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding !!LibraryPreviewImages[3]}"/>
+                                                </Grid>
+
+                                                <!-- Library Name Overlay -->
+                                                <Border Background="#CC000000" VerticalAlignment="Bottom" Padding="15,12">
+                                                    <TextBlock Text="{Binding Name}"
+                                                              FontSize="20"
+                                                              FontWeight="SemiBold"
+                                                              Foreground="White"
+                                                              TextAlignment="Center"/>
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Settings Button -->
+                        <Button Classes="toolbar-button">
+                            <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold"/>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Left Arrow for scrolling (appears on hover) -->
+                <Button Name="ScrollLeftButton"
+                        Width="60"
+                        Height="160"
+                        Background="#99000000"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Opacity="0"
+                        BorderThickness="0"
+                        Margin="0">
+                    <TextBlock Text="◀" FontSize="36" Foreground="White" FontWeight="Bold"/>
+                </Button>
+
+                <!-- Right Arrow for scrolling (appears on hover) -->
+                <Button Name="ScrollRightButton"
+                        Width="60"
+                        Height="160"
+                        Background="#99000000"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Opacity="0"
+                        BorderThickness="0"
+                        Margin="0">
+                    <TextBlock Text="▶" FontSize="36" Foreground="White" FontWeight="Bold"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Vertical Scrolling Rows of Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="40,40,40,40" Spacing="50">
+
+                <!-- Continue Watching Row -->
+                <StackPanel Spacing="20">
+                    <TextBlock Text="Continue Watching" Classes="heading"/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding ResumeItems}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="20"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Command="{Binding $parent[Window].DataContext.SelectItemCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Border Classes="media-card" Width="320" Height="180" ClipToBounds="True">
+                                            <Panel>
+                                                <Image Source="{Binding ImageBitmap}"
+                                                      Stretch="UniformToFill"
+                                                      Width="320"
+                                                      Height="180"/>
+                                                <Border Background="#AA000000" VerticalAlignment="Bottom" Padding="12,8">
+                                                    <TextBlock Text="{Binding Name}"
+                                                              FontSize="18"
+                                                              Foreground="White"
+                                                              TextTrimming="CharacterEllipsis"
+                                                              MaxLines="2"/>
+                                                </Border>
+                                            </Panel>
+                                        </Border>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
+                <!-- Latest in Libraries Rows (multiple rows, one per library) -->
+                <ItemsControl ItemsSource="{Binding LibraryRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Spacing="20" Margin="0,0,0,50">
+                                <TextBlock Text="{Binding Title}" Classes="heading"/>
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Items}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="20"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Padding="0"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Command="{Binding $parent[Window].DataContext.SelectItemCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Border Classes="media-card" Width="200" Height="300" ClipToBounds="True">
+                                                        <Panel>
+                                                            <Image Source="{Binding ImageBitmap}"
+                                                                  Stretch="UniformToFill"
+                                                                  Width="200"
+                                                                  Height="300"/>
+                                                            <Border Background="#AA000000" VerticalAlignment="Bottom" Padding="12,8">
+                                                                <TextBlock Text="{Binding Name}"
+                                                                          FontSize="16"
+                                                                          Foreground="White"
+                                                                          TextTrimming="CharacterEllipsis"
+                                                                          MaxLines="2"/>
+                                                            </Border>
+                                                        </Panel>
+                                                    </Border>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+            </StackPanel>
+        </ScrollViewer>
+        </Grid>
+
+        <!-- Detail View (for selected media) -->
+        <Grid IsVisible="{Binding ShowDetailView}" Grid.RowSpan="2" Background="#FF0F0F0F">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="40" Spacing="30">
+                    <!-- Back Button -->
+                    <Button Content="← Back to Home"
+                            Command="{Binding GoBackToHomeCommand}"
+                            HorizontalAlignment="Left"/>
+
+                    <!-- Media Info Section -->
+                    <Grid ColumnDefinitions="Auto,*" Margin="0,20,0,0">
+                        <!-- Poster -->
+                        <Border Grid.Column="0" Width="300" Height="450" CornerRadius="8" ClipToBounds="True" Margin="0,0,40,0">
+                            <Image Source="{Binding SelectedItem.ImageBitmap}"
+                                   Stretch="UniformToFill"/>
+                        </Border>
+
+                        <!-- Info Panel -->
+                        <StackPanel Grid.Column="1" Spacing="20" VerticalAlignment="Top">
+                            <TextBlock Text="{Binding SelectedItem.Name}"
+                                      Classes="title"/>
+
+                            <TextBlock Text="{Binding SelectedItem.Overview}"
+                                      Classes="body"
+                                      TextWrapping="Wrap"
+                                      MaxWidth="800"
+                                      HorizontalAlignment="Left"/>
+
+                            <!-- Action Buttons -->
+                            <StackPanel Orientation="Horizontal" Spacing="20">
+                                <!-- Play Button (for Movies or next episode for TV Shows) -->
+                                <Button Content="▶ Play"
+                                        FontSize="32"
+                                        Padding="40,20"
+                                        Background="#FF00A4DC"/>
+
+                                <!-- Cast & Crew Button -->
+                                <Button Content="Cast &amp; Crew"
+                                        FontSize="28"
+                                        Padding="30,15"
+                                        IsVisible="{Binding !!SelectedItem.People.Count}"
+                                        Command="{Binding ShowCastCrewCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Seasons Section (only for TV Shows) -->
+                    <StackPanel Spacing="20" IsVisible="{Binding !!Seasons.Count}">
+                        <TextBlock Text="Seasons" Classes="heading"/>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Seasons}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="20"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="0"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Command="{Binding $parent[Window].DataContext.SelectSeasonCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Border Classes="media-card" Width="200" Height="300" ClipToBounds="True">
+                                                <Panel>
+                                                    <Image Source="{Binding ImageBitmap}"
+                                                          Stretch="UniformToFill"
+                                                          Width="200"
+                                                          Height="300"/>
+                                                    <Border Background="#AA000000" VerticalAlignment="Bottom" Padding="12,8">
+                                                        <TextBlock Text="{Binding Name}"
+                                                                  FontSize="16"
+                                                                  Foreground="White"
+                                                                  TextTrimming="CharacterEllipsis"
+                                                                  MaxLines="2"/>
+                                                    </Border>
+                                                </Panel>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <!-- Episodes Section (when a season is selected) -->
+                    <StackPanel Spacing="20" IsVisible="{Binding !!Episodes.Count}">
+                        <TextBlock Text="Episodes" Classes="heading"/>
+                        <ItemsControl ItemsSource="{Binding Episodes}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Classes="media-card" Margin="0,0,0,15" Padding="0">
+                                        <Button Padding="0"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch">
+                                            <Grid ColumnDefinitions="Auto,*" Height="150">
+                                                <!-- Episode Thumbnail -->
+                                                <Image Grid.Column="0"
+                                                       Source="{Binding ImageBitmap}"
+                                                       Width="250"
+                                                       Height="150"
+                                                       Stretch="UniformToFill"/>
+
+                                                <!-- Episode Info -->
+                                                <StackPanel Grid.Column="1" Margin="20" Spacing="10" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}"
+                                                              FontSize="20"
+                                                              FontWeight="SemiBold"
+                                                              Foreground="White"/>
+                                                    <TextBlock Text="{Binding Overview}"
+                                                              FontSize="16"
+                                                              Foreground="#FFCCCCCC"
+                                                              TextTrimming="CharacterEllipsis"
+                                                              MaxLines="2"
+                                                              TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Cast & Crew Overlay -->
+        <Border IsVisible="{Binding ShowCastCrewView}"
+                Grid.RowSpan="2"
+                Background="#DD000000"
+                Padding="60">
+            <Border Background="#FF1A1A1A"
+                    CornerRadius="12"
+                    Padding="60"
+                    MaxWidth="1200"
+                    MaxHeight="900"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <!-- Header -->
+                    <StackPanel Grid.Row="0" Spacing="20" Margin="0,0,0,30">
+                        <TextBlock Text="Cast &amp; Crew" Classes="title"/>
+                        <TextBlock Text="{Binding SelectedItem.Name}"
+                                  FontSize="28"
+                                  Foreground="#FFCCCCCC"/>
+                    </StackPanel>
+
+                    <!-- Cast & Crew Grid -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding SelectedItem.People}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="280" Height="340"
+                                            Margin="15"
+                                            Background="#FF1A1A1A"
+                                            CornerRadius="8">
+                                        <StackPanel Spacing="15" Margin="20">
+                                            <!-- Profile Photo -->
+                                            <Border Width="200" Height="200"
+                                                    CornerRadius="100"
+                                                    ClipToBounds="True"
+                                                    HorizontalAlignment="Center"
+                                                    Background="#FF333333">
+                                                <Grid>
+                                                    <Image Source="{Binding ImageBitmap}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding !!ImageBitmap}"/>
+                                                    <TextBlock Text="?"
+                                                              FontSize="72"
+                                                              Foreground="#FF666666"
+                                                              HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"
+                                                              IsVisible="{Binding !ImageBitmap}"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Name and Role -->
+                                            <StackPanel Spacing="5">
+                                                <TextBlock Text="{Binding Name}"
+                                                          FontSize="20"
+                                                          FontWeight="SemiBold"
+                                                          Foreground="White"
+                                                          TextAlignment="Center"
+                                                          TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Role}"
+                                                          FontSize="16"
+                                                          Foreground="#FFAAAAAA"
+                                                          TextAlignment="Center"
+                                                          TextWrapping="Wrap"
+                                                          IsVisible="{Binding !!Role}"/>
+                                                <TextBlock Text="{Binding Type}"
+                                                          FontSize="14"
+                                                          Foreground="#FF00A4DC"
+                                                          TextAlignment="Center"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Close Button -->
+                    <Button Grid.Row="2"
+                            Content="Close"
+                            HorizontalAlignment="Center"
+                            Margin="0,30,0,0"
+                            Command="{Binding CloseCastCrewCommand}"/>
+                </Grid>
+            </Border>
+        </Border>
+        </Grid>
+    </Grid>
+
+</Window>
