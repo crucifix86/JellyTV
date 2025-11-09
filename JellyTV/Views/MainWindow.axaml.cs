@@ -23,10 +23,17 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Wire up mouse movement to show cursor
+        // Wire up mouse movement to show cursor and detect left edge
         this.PointerMoved += (s, e) =>
         {
             ShowCursor();
+
+            // Show sidebar when mouse is near left edge
+            var position = e.GetPosition(this);
+            if (position.X < 50)
+            {
+                ShowSidebar();
+            }
         };
 
         // Setup on-screen keyboard for login textboxes
@@ -168,22 +175,6 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
-        // Wire up ShowDesktopButton
-        var showDesktopButton = this.FindControl<Button>("ShowDesktopButton");
-        if (showDesktopButton != null)
-        {
-            showDesktopButton.Click -= OnShowDesktopButtonClick;
-            showDesktopButton.Click += OnShowDesktopButtonClick;
-        }
-
-        // Wire up LogoutButton
-        var logoutButton = this.FindControl<Button>("LogoutButton");
-        if (logoutButton != null)
-        {
-            logoutButton.Click -= OnLogoutButtonClick;
-            logoutButton.Click += OnLogoutButtonClick;
-        }
-
         // Wire up LaunchOnStartupButton
         var launchOnStartupButton = this.FindControl<Button>("LaunchOnStartupButton");
         var launchOnStartupStatus = this.FindControl<TextBlock>("LaunchOnStartupStatus");
@@ -319,6 +310,12 @@ StartupNotify=false";
         {
             Console.WriteLine("Gamepad: Home (Start) pressed");
             Avalonia.Threading.Dispatcher.UIThread.Post(() => HandleGamepadHome());
+        };
+
+        _gamepadService.SidebarTogglePressed += () =>
+        {
+            Console.WriteLine("Gamepad: Sidebar Toggle (R1) pressed");
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => OnSidebarToggle());
         };
 
         await _gamepadService.StartAsync();
@@ -635,11 +632,11 @@ StartupNotify=false";
             return;
         }
 
-        // If home menu is showing, hide it
-        var menuOverlay = this.FindControl<Border>("HomeMenuOverlay");
-        if (menuOverlay?.IsVisible == true)
+        // If sidebar is showing, hide it
+        var sidebarOverlay = this.FindControl<Border>("SidebarOverlay");
+        if (sidebarOverlay?.IsVisible == true)
         {
-            HideHomeMenu();
+            HideSidebar();
             return;
         }
 
@@ -788,35 +785,70 @@ StartupNotify=false";
     {
         HideCursor();
 
-        // Toggle the menu
-        var menuOverlay = this.FindControl<Border>("HomeMenuOverlay");
-        if (menuOverlay != null)
+        // Navigate to home (execute GoBackToHomeCommand)
+        if (DataContext is ViewModels.MainWindowViewModel viewModel)
         {
-            if (menuOverlay.IsVisible)
+            if (viewModel.GoBackToHomeCommand?.CanExecute(null) == true)
             {
-                HideHomeMenu();
-            }
-            else
-            {
-                ShowHomeMenu();
+                Console.WriteLine("Executing GoBackToHomeCommand from Home button");
+                viewModel.GoBackToHomeCommand.Execute(null);
             }
         }
     }
 
-    private void ShowHomeMenu()
+    private void OnSidebarToggle()
     {
-        var menuOverlay = this.FindControl<Border>("HomeMenuOverlay");
-        var settingsButton = this.FindControl<Button>("SettingsButton");
-        var logoutButton = this.FindControl<Button>("LogoutButton");
-        var closeMenuButton = this.FindControl<Button>("CloseMenuButton");
+        HideCursor();
 
-        if (menuOverlay == null) return;
+        // Toggle the sidebar
+        var sidebarOverlay = this.FindControl<Border>("SidebarOverlay");
+        if (sidebarOverlay != null)
+        {
+            if (sidebarOverlay.IsVisible)
+            {
+                HideSidebar();
+            }
+            else
+            {
+                ShowSidebar();
+            }
+        }
+    }
+
+    private void ShowSidebar()
+    {
+        var sidebarOverlay = this.FindControl<Border>("SidebarOverlay");
+        var homeButton = this.FindControl<Button>("HomeButton");
+        var appsButton = this.FindControl<Button>("AppsButton");
+        var settingsButton = this.FindControl<Button>("SettingsButton");
+        var showDesktopButton = this.FindControl<Button>("ShowDesktopButton");
+        var logoutButton = this.FindControl<Button>("LogoutButton");
+
+        if (sidebarOverlay == null) return;
 
         // Wire up button events
+        if (homeButton != null)
+        {
+            homeButton.Click -= OnHomeButtonClick;
+            homeButton.Click += OnHomeButtonClick;
+        }
+
+        if (appsButton != null)
+        {
+            appsButton.Click -= OnAppsButtonClick;
+            appsButton.Click += OnAppsButtonClick;
+        }
+
         if (settingsButton != null)
         {
             settingsButton.Click -= OnSettingsButtonClick;
             settingsButton.Click += OnSettingsButtonClick;
+        }
+
+        if (showDesktopButton != null)
+        {
+            showDesktopButton.Click -= OnShowDesktopButtonClick;
+            showDesktopButton.Click += OnShowDesktopButtonClick;
         }
 
         if (logoutButton != null)
@@ -825,42 +857,81 @@ StartupNotify=false";
             logoutButton.Click += OnLogoutButtonClick;
         }
 
-        if (closeMenuButton != null)
-        {
-            closeMenuButton.Click -= OnCloseMenuButtonClick;
-            closeMenuButton.Click += OnCloseMenuButtonClick;
-        }
+        // Wire up click on overlay background to close sidebar
+        sidebarOverlay.PointerPressed -= OnSidebarOverlayClick;
+        sidebarOverlay.PointerPressed += OnSidebarOverlayClick;
 
-        menuOverlay.IsVisible = true;
-        menuOverlay.UpdateLayout();
+        sidebarOverlay.IsVisible = true;
+        sidebarOverlay.UpdateLayout();
 
         // Focus the first button
-        settingsButton?.Focus();
+        homeButton?.Focus();
 
-        Console.WriteLine("Home menu shown");
+        Console.WriteLine("Sidebar shown");
     }
 
-    private void HideHomeMenu()
+    private void HideSidebar()
     {
-        var menuOverlay = this.FindControl<Border>("HomeMenuOverlay");
-        if (menuOverlay != null)
+        var sidebarOverlay = this.FindControl<Border>("SidebarOverlay");
+        if (sidebarOverlay != null)
         {
-            menuOverlay.IsVisible = false;
-            Console.WriteLine("Home menu hidden");
+            sidebarOverlay.IsVisible = false;
+            Console.WriteLine("Sidebar hidden");
         }
+    }
+
+    private void OnSidebarOverlayClick(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        // Check if click was on the overlay background (not the sidebar itself)
+        var sidebar = this.FindControl<Border>("Sidebar");
+        if (sidebar != null && e.Source is Visual visual)
+        {
+            // If the click was not within the sidebar panel, hide it
+            if (!IsVisualDescendantOf(visual, sidebar))
+            {
+                HideSidebar();
+            }
+        }
+    }
+
+    private bool IsVisualDescendantOf(Visual child, Visual parent)
+    {
+        var current = child;
+        while (current != null)
+        {
+            if (current == parent)
+                return true;
+            current = current.GetVisualParent();
+        }
+        return false;
+    }
+
+    private void OnHomeButtonClick(object? sender, RoutedEventArgs e)
+    {
+        Console.WriteLine("Home button clicked");
+        HideSidebar();
+
+        if (DataContext is ViewModels.MainWindowViewModel viewModel)
+        {
+            if (viewModel.GoBackToHomeCommand?.CanExecute(null) == true)
+            {
+                viewModel.GoBackToHomeCommand.Execute(null);
+            }
+        }
+    }
+
+    private void OnAppsButtonClick(object? sender, RoutedEventArgs e)
+    {
+        Console.WriteLine("Apps button clicked");
+        // Apps functionality not yet implemented
+        HideSidebar();
     }
 
     private void OnSettingsButtonClick(object? sender, RoutedEventArgs e)
     {
         Console.WriteLine("Settings button clicked");
-        HideHomeMenu();
+        HideSidebar();
         ShowSettings();
-    }
-
-    private void OnCloseMenuButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Close menu button clicked");
-        HideHomeMenu();
     }
 
     private void ShowSettings()
@@ -905,7 +976,7 @@ StartupNotify=false";
     private void OnLogoutButtonClick(object? sender, RoutedEventArgs e)
     {
         Console.WriteLine("Logout button clicked");
-        HideHomeMenu();
+        HideSidebar();
 
         if (DataContext is ViewModels.MainWindowViewModel viewModel)
         {

@@ -44,6 +44,7 @@ public class GamepadInputService : IDisposable
     public event Action? SelectPressed;  // A button
     public event Action? BackPressed;    // B button
     public event Action? HomePressed;    // Start button
+    public event Action? SidebarTogglePressed;  // R1 button
 
     public GamepadInputService(string devicePath = "/dev/input/js0")
     {
@@ -191,13 +192,19 @@ public class GamepadInputService : IDisposable
                 BackPressed?.Invoke();
                 break;
             case BTN_START:
-                // Start button = Home/Menu (Android TV standard)
-                HomePressed?.Invoke();
+                // Start button (reported as button 7) = Sidebar toggle (R1)
+                Console.WriteLine("Gamepad: Sidebar Toggle (R1) pressed");
+                SidebarTogglePressed?.Invoke();
                 break;
             case BTN_LB:
+                // Left shoulder button could be used for paging through content
+                break;
             case BTN_RB:
-                // Shoulder buttons could be used for paging through content
-                // or changing tabs
+                // Right shoulder button = unused for now
+                break;
+            case BTN_XBOX:
+                // Xbox button = Home/Menu
+                HomePressed?.Invoke();
                 break;
         }
     }

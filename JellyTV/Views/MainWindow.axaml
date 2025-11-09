@@ -183,112 +183,10 @@
         <!-- Home Screen (when authenticated) - TV App Layout -->
         <Grid IsVisible="{Binding IsAuthenticated}" RowDefinitions="Auto,*">
 
-        <!-- Main Home View -->
-        <Grid IsVisible="{Binding !ShowDetailView}" RowDefinitions="Auto,*" Grid.RowSpan="2">
-        <!-- Horizontal Toolbar with Library Tiles -->
-        <Border Grid.Row="0" Background="#FF151515" BorderBrush="#FF333333" BorderThickness="0,0,0,2" Padding="30,20">
-            <Grid>
-                <ScrollViewer Name="LibraryScrollViewer"
-                             HorizontalScrollBarVisibility="Hidden"
-                             VerticalScrollBarVisibility="Disabled">
-                    <StackPanel Orientation="Horizontal" Spacing="30">
-                        <!-- JellyTV Logo/Title -->
-                        <TextBlock Text="JellyTV"
-                                  FontSize="42"
-                                  FontWeight="Bold"
-                                  Foreground="White"
-                                  VerticalAlignment="Center"
-                                  Margin="10,0,30,0"/>
-
-                        <!-- Home Button -->
-                        <Button Name="HomeButton" Classes="toolbar-button" Command="{Binding GoBackToHomeCommand}" Focusable="True" IsTabStop="True">
-                            <TextBlock Text="Home" FontSize="24" FontWeight="SemiBold"/>
-                        </Button>
-
-                        <!-- Library Tiles with 2x2 Preview Grid -->
-                        <ItemsControl ItemsSource="{Binding Libraries}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="25"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Padding="0" Background="Transparent" BorderThickness="0">
-                                        <Border CornerRadius="10" ClipToBounds="True" Width="240" Height="160">
-                                            <Grid>
-                                                <!-- 2x2 Grid of Preview Images -->
-                                                <Grid RowDefinitions="*,*" ColumnDefinitions="*,*">
-                                                    <Image Grid.Row="0" Grid.Column="0"
-                                                           Source="{Binding LibraryPreviewImages[0]}"
-                                                           Stretch="UniformToFill"
-                                                           IsVisible="{Binding !!LibraryPreviewImages[0]}"/>
-                                                    <Image Grid.Row="0" Grid.Column="1"
-                                                           Source="{Binding LibraryPreviewImages[1]}"
-                                                           Stretch="UniformToFill"
-                                                           IsVisible="{Binding !!LibraryPreviewImages[1]}"/>
-                                                    <Image Grid.Row="1" Grid.Column="0"
-                                                           Source="{Binding LibraryPreviewImages[2]}"
-                                                           Stretch="UniformToFill"
-                                                           IsVisible="{Binding !!LibraryPreviewImages[2]}"/>
-                                                    <Image Grid.Row="1" Grid.Column="1"
-                                                           Source="{Binding LibraryPreviewImages[3]}"
-                                                           Stretch="UniformToFill"
-                                                           IsVisible="{Binding !!LibraryPreviewImages[3]}"/>
-                                                </Grid>
-
-                                                <!-- Library Name Overlay -->
-                                                <Border Background="#CC000000" VerticalAlignment="Bottom" Padding="15,12">
-                                                    <TextBlock Text="{Binding Name}"
-                                                              FontSize="20"
-                                                              FontWeight="SemiBold"
-                                                              Foreground="White"
-                                                              TextAlignment="Center"/>
-                                                </Border>
-                                            </Grid>
-                                        </Border>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <!-- Settings Button -->
-                        <Button Classes="toolbar-button">
-                            <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold"/>
-                        </Button>
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- Left Arrow for scrolling (appears on hover) -->
-                <Button Name="ScrollLeftButton"
-                        Width="60"
-                        Height="160"
-                        Background="#99000000"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"
-                        Opacity="0"
-                        BorderThickness="0"
-                        Margin="0">
-                    <TextBlock Text="◀" FontSize="36" Foreground="White" FontWeight="Bold"/>
-                </Button>
-
-                <!-- Right Arrow for scrolling (appears on hover) -->
-                <Button Name="ScrollRightButton"
-                        Width="60"
-                        Height="160"
-                        Background="#99000000"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Opacity="0"
-                        BorderThickness="0"
-                        Margin="0">
-                    <TextBlock Text="▶" FontSize="36" Foreground="White" FontWeight="Bold"/>
-                </Button>
-            </Grid>
-        </Border>
-
+        <!-- Main Home View - Full Screen -->
+        <Grid IsVisible="{Binding !ShowDetailView}" Grid.RowSpan="2">
         <!-- Vertical Scrolling Rows of Content -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="40,40,40,40" Spacing="50">
 
                 <!-- Continue Watching Row -->
@@ -619,55 +517,82 @@
             <views:OnScreenKeyboard x:Name="OnScreenKeyboard"/>
         </Border>
 
-        <!-- Home Menu Overlay -->
-        <Border Name="HomeMenuOverlay"
+        <!-- Slide-out Sidebar -->
+        <Border Name="SidebarOverlay"
                 IsVisible="False"
-                Background="#DD000000"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-            <Border Background="#FF1A1A1A"
-                    CornerRadius="12"
-                    Padding="60"
-                    MinWidth="500">
-                <StackPanel Spacing="20">
+                Background="#AA000000"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <Border Name="Sidebar"
+                    Background="#FF1A1A1A"
+                    Width="350"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Stretch"
+                    BorderBrush="#FF333333"
+                    BorderThickness="0,0,2,0">
+                <StackPanel Spacing="0" Margin="0,40,0,40">
                     <TextBlock Text="Menu"
                               FontSize="36"
                               FontWeight="Bold"
                               Foreground="White"
-                              HorizontalAlignment="Center"
-                              Margin="0,0,0,20"/>
+                              Margin="30,0,30,30"/>
 
-                    <Button Name="ShowDesktopButton"
-                            Content="Show Desktop"
+                    <Button Name="HomeButton"
+                            Content="🏠 Home"
                             HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
                             FontSize="28"
-                            Padding="30,15"
+                            Padding="30,20"
                             Focusable="True"
-                            IsTabStop="True"/>
+                            IsTabStop="True"
+                            Background="Transparent"
+                            BorderThickness="0"/>
+
+                    <Button Name="AppsButton"
+                            Content="📱 Apps"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            FontSize="28"
+                            Padding="30,20"
+                            Focusable="True"
+                            IsTabStop="True"
+                            Background="Transparent"
+                            BorderThickness="0"/>
 
                     <Button Name="SettingsButton"
-                            Content="Controller Settings"
+                            Content="⚙ Settings"
                             HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
                             FontSize="28"
-                            Padding="30,15"
+                            Padding="30,20"
                             Focusable="True"
-                            IsTabStop="True"/>
+                            IsTabStop="True"
+                            Background="Transparent"
+                            BorderThickness="0"/>
+
+                    <Border Height="2" Background="#FF333333" Margin="20,20"/>
+
+                    <Button Name="ShowDesktopButton"
+                            Content="🖥 Show Desktop"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            FontSize="28"
+                            Padding="30,20"
+                            Focusable="True"
+                            IsTabStop="True"
+                            Background="Transparent"
+                            BorderThickness="0"/>
 
                     <Button Name="LogoutButton"
-                            Content="Logout"
+                            Content="🚪 Logout"
                             HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
                             FontSize="28"
-                            Padding="30,15"
+                            Padding="30,20"
                             Focusable="True"
-                            IsTabStop="True"/>
-
-                    <Button Name="CloseMenuButton"
-                            Content="Close Menu"
-                            HorizontalAlignment="Stretch"
-                            FontSize="28"
-                            Padding="30,15"
-                            Focusable="True"
-                            IsTabStop="True"/>
+                            IsTabStop="True"
+                            Background="Transparent"
+                            BorderThickness="0"/>
                 </StackPanel>
             </Border>
         </Border>
