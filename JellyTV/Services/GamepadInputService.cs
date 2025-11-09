@@ -116,7 +116,48 @@ public class GamepadInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error reading gamepad input: {ex.Message}");
+            Console.WriteLine($"Gamepad disconnected or error: {ex.Message}");
+
+            // Clean up the disconnected stream
+            _deviceStream?.Dispose();
+            _deviceStream = null;
+
+            // Try to reconnect if not cancelled
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                Console.WriteLine("Attempting to reconnect to gamepad in 2 seconds...");
+                await Task.Delay(2000, cancellationToken);
+                await TryReconnectAsync(cancellationToken);
+            }
+        }
+    }
+
+    private async Task TryReconnectAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (File.Exists(_devicePath))
+                {
+                    _deviceStream = new FileStream(_devicePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    Console.WriteLine($"Gamepad reconnected: {_devicePath}");
+
+                    // Continue reading from the reconnected device
+                    await ReadGamepadInputAsync(cancellationToken);
+                    break;
+                }
+                else
+                {
+                    Console.WriteLine($"Gamepad device not found, retrying in 2 seconds...");
+                    await Task.Delay(2000, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Reconnection attempt failed: {ex.Message}. Retrying in 2 seconds...");
+                await Task.Delay(2000, cancellationToken);
+            }
         }
     }
 

@@ -637,8 +637,8 @@
                               HorizontalAlignment="Center"
                               Margin="0,0,0,20"/>
 
-                    <Button Name="LogoutButton"
-                            Content="Logout"
+                    <Button Name="ShowDesktopButton"
+                            Content="Show Desktop"
                             HorizontalAlignment="Stretch"
                             FontSize="28"
                             Padding="30,15"
@@ -646,7 +646,15 @@
                             IsTabStop="True"/>
 
                     <Button Name="SettingsButton"
-                            Content="Settings"
+                            Content="Controller Settings"
+                            HorizontalAlignment="Stretch"
+                            FontSize="28"
+                            Padding="30,15"
+                            Focusable="True"
+                            IsTabStop="True"/>
+
+                    <Button Name="LogoutButton"
+                            Content="Logout"
                             HorizontalAlignment="Stretch"
                             FontSize="28"
                             Padding="30,15"
@@ -671,14 +679,14 @@
             <Border Background="#FF1A1A1A"
                     CornerRadius="12"
                     Padding="60"
-                    MaxWidth="1400"
-                    MaxHeight="900"
+                    MaxWidth="900"
+                    MaxHeight="700"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
                 <Grid RowDefinitions="Auto,*,Auto">
                     <!-- Header -->
                     <TextBlock Grid.Row="0"
-                              Text="Settings"
+                              Text="Controller Settings"
                               FontSize="42"
                               FontWeight="Bold"
                               Foreground="White"
@@ -689,75 +697,10 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="30">
 
-                            <!-- Audio Settings Section -->
-                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
-                                <StackPanel Spacing="15">
-                                    <TextBlock Text="Audio Settings"
-                                              FontSize="32"
-                                              FontWeight="SemiBold"
-                                              Foreground="White"
-                                              Margin="0,0,0,10"/>
-
-                                    <Button Name="AudioOutputButton"
-                                            Content="Audio Output Device"
-                                            HorizontalAlignment="Stretch"
-                                            FontSize="24"
-                                            Padding="20,12"
-                                            Focusable="True"
-                                            IsTabStop="True"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Video Settings Section -->
-                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
-                                <StackPanel Spacing="15">
-                                    <TextBlock Text="Video Settings"
-                                              FontSize="32"
-                                              FontWeight="SemiBold"
-                                              Foreground="White"
-                                              Margin="0,0,0,10"/>
-
-                                    <Button Name="VideoOutputButton"
-                                            Content="Video Output Device"
-                                            HorizontalAlignment="Stretch"
-                                            FontSize="24"
-                                            Padding="20,12"
-                                            Focusable="True"
-                                            IsTabStop="True"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Bluetooth Settings Section -->
-                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
-                                <StackPanel Spacing="15">
-                                    <TextBlock Text="Bluetooth Settings"
-                                              FontSize="32"
-                                              FontWeight="SemiBold"
-                                              Foreground="White"
-                                              Margin="0,0,0,10"/>
-
-                                    <Button Name="BluetoothPairButton"
-                                            Content="Pair Bluetooth Device"
-                                            HorizontalAlignment="Stretch"
-                                            FontSize="24"
-                                            Padding="20,12"
-                                            Focusable="True"
-                                            IsTabStop="True"/>
-
-                                    <Button Name="BluetoothManageButton"
-                                            Content="Manage Paired Devices"
-                                            HorizontalAlignment="Stretch"
-                                            FontSize="24"
-                                            Padding="20,12"
-                                            Focusable="True"
-                                            IsTabStop="True"/>
-                                </StackPanel>
-                            </Border>
-
                             <!-- Controller Settings Section -->
                             <Border Background="#FF252525" CornerRadius="8" Padding="30">
                                 <StackPanel Spacing="15">
-                                    <TextBlock Text="Controller Settings"
+                                    <TextBlock Text="Button Configuration"
                                               FontSize="32"
                                               FontWeight="SemiBold"
                                               Foreground="White"
@@ -781,6 +724,36 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Application Settings Section -->
+                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
+                                <StackPanel Spacing="15">
+                                    <TextBlock Text="Application"
+                                              FontSize="32"
+                                              FontWeight="SemiBold"
+                                              Foreground="White"
+                                              Margin="0,0,0,10"/>
+
+                                    <Button Name="LaunchOnStartupButton"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="24"
+                                            Padding="20,12"
+                                            Focusable="True"
+                                            IsTabStop="True">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0"
+                                                      Text="Launch on Startup"
+                                                      VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1"
+                                                      Name="LaunchOnStartupStatus"
+                                                      Text="[ ]"
+                                                      FontSize="28"
+                                                      Margin="20,0,0,0"
+                                                      VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+
                         </StackPanel>
                     </ScrollViewer>
 
@@ -798,179 +771,6 @@
             </Border>
         </Border>
 
-        <!-- Audio Output Selection Overlay -->
-        <Border Name="AudioOutputOverlay"
-                IsVisible="False"
-                Background="#DD000000">
-            <Border Background="#FF1A1A1A"
-                    CornerRadius="12"
-                    Padding="60"
-                    MaxWidth="1000"
-                    MaxHeight="700"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                <Grid RowDefinitions="Auto,*,Auto">
-                    <!-- Header -->
-                    <TextBlock Grid.Row="0"
-                              Text="Select Audio Output Device"
-                              FontSize="38"
-                              FontWeight="Bold"
-                              Foreground="White"
-                              HorizontalAlignment="Center"
-                              Margin="0,0,0,30"/>
-
-                    <!-- Audio Device List -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Name="AudioDeviceList" Spacing="12"/>
-                    </ScrollViewer>
-
-                    <!-- Back Button -->
-                    <Button Grid.Row="2"
-                            Name="CloseAudioOutputButton"
-                            Content="Back to Settings"
-                            HorizontalAlignment="Center"
-                            FontSize="28"
-                            Padding="40,15"
-                            Margin="0,30,0,0"
-                            Focusable="True"
-                            IsTabStop="True"/>
-                </Grid>
-            </Border>
-        </Border>
-
-        <!-- Video Output Selection Overlay -->
-        <Border Name="VideoOutputOverlay"
-                IsVisible="False"
-                Background="#DD000000">
-            <Border Background="#FF1A1A1A"
-                    CornerRadius="12"
-                    Padding="60"
-                    MaxWidth="1000"
-                    MaxHeight="700"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                <Grid RowDefinitions="Auto,*,Auto">
-                    <!-- Header -->
-                    <TextBlock Grid.Row="0"
-                              Text="Select Video Output"
-                              FontSize="38"
-                              FontWeight="Bold"
-                              Foreground="White"
-                              HorizontalAlignment="Center"
-                              Margin="0,0,0,30"/>
-
-                    <!-- Video Output List -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Name="VideoOutputList" Spacing="12"/>
-                    </ScrollViewer>
-
-                    <!-- Back Button -->
-                    <Button Grid.Row="2"
-                            Name="CloseVideoOutputButton"
-                            Content="Back to Settings"
-                            HorizontalAlignment="Center"
-                            FontSize="28"
-                            Padding="40,15"
-                            Margin="0,30,0,0"
-                            Focusable="True"
-                            IsTabStop="True"/>
-                </Grid>
-            </Border>
-        </Border>
-
-        <!-- Bluetooth Pairing Overlay -->
-        <Border Name="BluetoothPairOverlay"
-                IsVisible="False"
-                Background="#DD000000">
-            <Border Background="#FF1A1A1A"
-                    CornerRadius="12"
-                    Padding="60"
-                    MaxWidth="1000"
-                    MaxHeight="700"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                <Grid RowDefinitions="Auto,Auto,*,Auto">
-                    <!-- Header -->
-                    <TextBlock Grid.Row="0"
-                              Text="Pair Bluetooth Device"
-                              FontSize="38"
-                              FontWeight="Bold"
-                              Foreground="White"
-                              HorizontalAlignment="Center"
-                              Margin="0,0,0,20"/>
-
-                    <!-- Status Text -->
-                    <TextBlock Grid.Row="1"
-                              Name="BluetoothScanStatus"
-                              Text="Scanning for devices..."
-                              FontSize="20"
-                              Foreground="#FFAAAAAA"
-                              HorizontalAlignment="Center"
-                              Margin="0,0,0,20"/>
-
-                    <!-- Device List -->
-                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Name="BluetoothDeviceList" Spacing="12"/>
-                    </ScrollViewer>
-
-                    <!-- Buttons -->
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="20" Margin="0,30,0,0">
-                        <Button Name="RefreshBluetoothButton"
-                                Content="Refresh Scan"
-                                FontSize="24"
-                                Padding="30,12"
-                                Focusable="True"
-                                IsTabStop="True"/>
-                        <Button Name="CloseBluetoothPairButton"
-                                Content="Back to Settings"
-                                FontSize="24"
-                                Padding="30,12"
-                                Focusable="True"
-                                IsTabStop="True"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
-        </Border>
-
-        <!-- Bluetooth Manage Devices Overlay -->
-        <Border Name="BluetoothManageOverlay"
-                IsVisible="False"
-                Background="#DD000000">
-            <Border Background="#FF1A1A1A"
-                    CornerRadius="12"
-                    Padding="60"
-                    MaxWidth="1000"
-                    MaxHeight="700"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                <Grid RowDefinitions="Auto,*,Auto">
-                    <!-- Header -->
-                    <TextBlock Grid.Row="0"
-                              Text="Manage Paired Devices"
-                              FontSize="38"
-                              FontWeight="Bold"
-                              Foreground="White"
-                              HorizontalAlignment="Center"
-                              Margin="0,0,0,30"/>
-
-                    <!-- Paired Device List -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Name="PairedDeviceList" Spacing="12"/>
-                    </ScrollViewer>
-
-                    <!-- Back Button -->
-                    <Button Grid.Row="2"
-                            Name="CloseBluetoothManageButton"
-                            Content="Back to Settings"
-                            HorizontalAlignment="Center"
-                            FontSize="28"
-                            Padding="40,15"
-                            Margin="0,30,0,0"
-                            Focusable="True"
-                            IsTabStop="True"/>
-                </Grid>
-            </Border>
-        </Border>
     </Grid>
 
 </Window>

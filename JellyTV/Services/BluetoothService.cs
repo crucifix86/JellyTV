@@ -13,6 +13,7 @@ public class BluetoothDevice
     public string Address { get; set; } = "";
     public string Name { get; set; } = "";
     public bool IsPaired { get; set; }
+    public bool IsBonded { get; set; }
     public bool IsConnected { get; set; }
     public string DeviceType { get; set; } = "Unknown";
 }
@@ -21,6 +22,7 @@ public class BluetoothService
 {
     private Process? _scanProcess;
     private bool _isScanning;
+    private HashSet<string> _discoveredDevices = new HashSet<string>();
 
     public async Task<bool> PowerOnBluetoothAsync()
     {
@@ -42,18 +44,24 @@ public class BluetoothService
         try
         {
             if (_isScanning)
+            {
+                Console.WriteLine("Scan already running");
                 return true;
+            }
 
             Console.WriteLine("Starting Bluetooth scan...");
 
             // Make sure Bluetooth is powered on
             await PowerOnBluetoothAsync();
 
-            // Start scanning
-            var result = await RunBluetoothCtlCommandAsync("scan on");
+            // Clear previously discovered devices
+            _discoveredDevices.Clear();
+
+            // Start scanning using bluetoothctl - this command needs to run continuously
+            await RunBluetoothCtlCommandAsync("scan on", timeout: 1000);
             _isScanning = true;
 
-            Console.WriteLine("Bluetooth scan started");
+            Console.WriteLine("Bluetooth scan started - devices will be discovered over the next few seconds");
             return true;
         }
         catch (Exception ex)
@@ -87,45 +95,33 @@ public class BluetoothService
     public async Task<List<BluetoothDevice>> GetDevicesAsync()
     {
         var devices = new List<BluetoothDevice>();
+        var seenAddresses = new HashSet<string>();
 
         try
         {
-            // Use bluetoothctl devices to get all devices from bluetoothd daemon
-            var process = new Process
+            Console.WriteLine("Scanning for Bluetooth devices (including BLE)...");
+
+            // Use bluetoothctl with scan running to get discovered devices
+            // This is needed for BLE devices like Xbox controllers
+            var btOutput = await RunBluetoothCtlCommandAsync("devices", timeout: 2000);
+            Console.WriteLine($"bluetoothctl devices output:\n{btOutput}");
+
+            var btLines = btOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var line in btLines)
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "bluetoothctl",
-                    Arguments = "devices",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
-
-            Console.WriteLine($"bluetoothctl -- devices output:\n{output}");
-
-            // Parse device list
-            // Format: "Device XX:XX:XX:XX:XX:XX Device Name"
-            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var line in lines)
-            {
-                // Remove ANSI escape codes that bluetoothctl might add
                 var cleanLine = Regex.Replace(line, @"\x1B\[[^@-~]*[@-~]", "");
-
                 var match = Regex.Match(cleanLine, @"Device\s+([0-9A-Fa-f:]+)\s+(.+)", RegexOptions.IgnoreCase);
                 if (match.Success)
                 {
                     var address = match.Groups[1].Value;
                     var name = match.Groups[2].Value.Trim();
 
-                    // Get device info
+                    if (seenAddresses.Contains(address))
+                        continue;
+
+                    seenAddresses.Add(address);
+
                     var info = await GetDeviceInfoAsync(address);
 
                     devices.Add(new BluetoothDevice
@@ -133,11 +129,12 @@ public class BluetoothService
                         Address = address,
                         Name = name,
                         IsPaired = info.IsPaired,
+                        IsBonded = info.IsBonded,
                         IsConnected = info.IsConnected,
                         DeviceType = info.DeviceType
                     });
 
-                    Console.WriteLine($"Found device: {name} ({address}) - Paired: {info.IsPaired}, Connected: {info.IsConnected}");
+                    Console.WriteLine($"Found device: {name} ({address}) - Paired: {info.IsPaired}, Bonded: {info.IsBonded}, Type: {info.DeviceType}");
                 }
             }
         }
@@ -146,6 +143,7 @@ public class BluetoothService
             Console.WriteLine($"Error getting devices: {ex.Message}");
         }
 
+        Console.WriteLine($"Total devices found: {devices.Count}");
         return devices;
     }
 
@@ -206,6 +204,7 @@ public class BluetoothService
             var output = await RunBluetoothCtlCommandAsync($"info {address}");
 
             device.IsPaired = output.Contains("Paired: yes");
+            device.IsBonded = output.Contains("Bonded: yes");
             device.IsConnected = output.Contains("Connected: yes");
 
             // Try to determine device type
@@ -235,6 +234,15 @@ public class BluetoothService
         try
         {
             Console.WriteLine($"Pairing with device {address}...");
+
+            // Check if already connected - if so, disconnect first
+            var deviceInfo = await GetDeviceInfoAsync(address);
+            if (deviceInfo.IsConnected)
+            {
+                Console.WriteLine($"Device is connected, disconnecting first...");
+                await DisconnectDeviceAsync(address);
+                await Task.Delay(2000); // Wait for disconnect to complete
+            }
 
             // We need to keep bluetoothctl running with an agent to handle pairing
             var process = new Process
@@ -277,16 +285,12 @@ public class BluetoothService
             await process.StandardInput.WriteLineAsync("default-agent");
             await Task.Delay(200);
 
-            // Trust the device first
-            await process.StandardInput.WriteLineAsync($"trust {address}");
-            await Task.Delay(500);
-
-            // Start pairing
+            // Start pairing - this establishes encryption needed for HID devices
             await process.StandardInput.WriteLineAsync($"pair {address}");
 
             // Wait for pairing to complete (up to 30 seconds)
             var startTime = DateTime.Now;
-            var success = false;
+            var pairSuccess = false;
 
             while ((DateTime.Now - startTime).TotalSeconds < 30)
             {
@@ -300,7 +304,7 @@ public class BluetoothService
 
                 if (currentOutput.Contains("Pairing successful") || currentOutput.Contains("already paired"))
                 {
-                    success = true;
+                    pairSuccess = true;
                     Console.WriteLine($"Paired successfully with {address}");
                     break;
                 }
@@ -310,6 +314,30 @@ public class BluetoothService
                     break;
                 }
             }
+
+            if (!pairSuccess)
+            {
+                // Clean up
+                await process.StandardInput.WriteLineAsync("exit");
+                await process.StandardInput.FlushAsync();
+                try
+                {
+                    await process.WaitForExitAsync(new CancellationToken());
+                }
+                catch
+                {
+                    process.Kill();
+                }
+                return false;
+            }
+
+            // Trust the device after successful pairing
+            await process.StandardInput.WriteLineAsync($"trust {address}");
+            await Task.Delay(500);
+
+            // Connect the device
+            await process.StandardInput.WriteLineAsync($"connect {address}");
+            await Task.Delay(2000);
 
             // Clean up
             await process.StandardInput.WriteLineAsync("exit");
@@ -324,7 +352,8 @@ public class BluetoothService
                 process.Kill();
             }
 
-            return success;
+            Console.WriteLine($"Device {address} paired, trusted, and connected successfully");
+            return true;
         }
         catch (Exception ex)
         {
@@ -375,11 +404,56 @@ public class BluetoothService
         }
     }
 
+    public async Task<bool> UnpairDeviceAsync(string address)
+    {
+        try
+        {
+            Console.WriteLine($"Unpairing device {address}...");
+
+            // First disconnect if connected
+            var deviceInfo = await GetDeviceInfoAsync(address);
+            if (deviceInfo.IsConnected)
+            {
+                Console.WriteLine($"Device is connected, disconnecting first...");
+                await DisconnectDeviceAsync(address);
+                await Task.Delay(1000);
+            }
+
+            // Remove the device - this unpairs and removes it completely
+            var result = await RunBluetoothCtlCommandAsync($"remove {address}");
+
+            if (result.Contains("Device has been removed") || result.Contains("not available"))
+            {
+                Console.WriteLine($"Device {address} unpaired and removed successfully");
+                return true;
+            }
+            else
+            {
+                Console.WriteLine($"Unpair result: {result}");
+                return true; // Still return true as the command executed
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error unpairing device: {ex.Message}");
+            return false;
+        }
+    }
+
     public async Task<bool> RemoveDeviceAsync(string address)
     {
         try
         {
             Console.WriteLine($"Removing device {address}...");
+
+            // Disconnect first if needed
+            var deviceInfo = await GetDeviceInfoAsync(address);
+            if (deviceInfo.IsConnected)
+            {
+                await DisconnectDeviceAsync(address);
+                await Task.Delay(1000);
+            }
+
             var result = await RunBluetoothCtlCommandAsync($"remove {address}");
 
             Console.WriteLine($"Removed device {address}");

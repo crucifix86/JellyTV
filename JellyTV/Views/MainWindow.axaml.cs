@@ -18,9 +18,6 @@ public partial class MainWindow : Window
 {
     private GamepadInputService? _gamepadService;
     private TextBox? _keyboardTargetTextBox;
-    private AudioService _audioService = new AudioService();
-    private VideoService _videoService = new VideoService();
-    private BluetoothService _bluetoothService = new BluetoothService();
 
     public MainWindow()
     {
@@ -74,6 +71,9 @@ public partial class MainWindow : Window
 
         // Initialize gamepad support
         InitializeGamepadAsync();
+
+        // Wire up settings UI controls
+        this.Loaded += OnLoaded;
 
         // Wire up MPV player control
         var mpvPlayer = this.FindControl<Controls.MpvPlayerControl>("MpvPlayer");
@@ -164,6 +164,132 @@ public partial class MainWindow : Window
                 };
             }
         };
+    }
+
+    private void OnLoaded(object? sender, RoutedEventArgs e)
+    {
+        // Wire up ShowDesktopButton
+        var showDesktopButton = this.FindControl<Button>("ShowDesktopButton");
+        if (showDesktopButton != null)
+        {
+            showDesktopButton.Click -= OnShowDesktopButtonClick;
+            showDesktopButton.Click += OnShowDesktopButtonClick;
+        }
+
+        // Wire up LogoutButton
+        var logoutButton = this.FindControl<Button>("LogoutButton");
+        if (logoutButton != null)
+        {
+            logoutButton.Click -= OnLogoutButtonClick;
+            logoutButton.Click += OnLogoutButtonClick;
+        }
+
+        // Wire up LaunchOnStartupButton
+        var launchOnStartupButton = this.FindControl<Button>("LaunchOnStartupButton");
+        var launchOnStartupStatus = this.FindControl<TextBlock>("LaunchOnStartupStatus");
+
+        if (launchOnStartupButton != null && launchOnStartupStatus != null)
+        {
+            // Check if autostart file exists and set status accordingly
+            var autostartDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "autostart");
+            var autostartFile = Path.Combine(autostartDir, "jellytv.desktop");
+            launchOnStartupStatus.Text = File.Exists(autostartFile) ? "[X]" : "[ ]";
+
+            // Wire up button click event
+            launchOnStartupButton.Click -= OnLaunchOnStartupButtonClick;
+            launchOnStartupButton.Click += OnLaunchOnStartupButtonClick;
+        }
+    }
+
+    private void OnShowDesktopButtonClick(object? sender, RoutedEventArgs e)
+    {
+        Console.WriteLine("Show Desktop button clicked");
+        try
+        {
+            // Try wmctrl first
+            var processInfo = new ProcessStartInfo
+            {
+                FileName = "wmctrl",
+                Arguments = "-k on",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process.Start(processInfo);
+            Console.WriteLine("Minimized window using wmctrl");
+        }
+        catch
+        {
+            // Fallback to xdotool
+            try
+            {
+                var processInfo = new ProcessStartInfo
+                {
+                    FileName = "xdotool",
+                    Arguments = "key Super_L+d",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                Process.Start(processInfo);
+                Console.WriteLine("Showed desktop using xdotool");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to minimize/show desktop: {ex.Message}");
+            }
+        }
+    }
+
+    private void OnLaunchOnStartupButtonClick(object? sender, RoutedEventArgs e)
+    {
+        var launchOnStartupStatus = this.FindControl<TextBlock>("LaunchOnStartupStatus");
+        if (launchOnStartupStatus == null) return;
+
+        var autostartDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "autostart");
+        var autostartFile = Path.Combine(autostartDir, "jellytv.desktop");
+
+        // Toggle autostart state
+        bool isCurrentlyEnabled = File.Exists(autostartFile);
+
+        if (isCurrentlyEnabled)
+        {
+            // Remove autostart file
+            try
+            {
+                File.Delete(autostartFile);
+                launchOnStartupStatus.Text = "[ ]";
+                Console.WriteLine($"Deleted autostart file: {autostartFile}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to delete autostart file: {ex.Message}");
+            }
+        }
+        else
+        {
+            // Create autostart file
+            try
+            {
+                Directory.CreateDirectory(autostartDir);
+
+                var desktopEntry = @"[Desktop Entry]
+Type=Application
+Name=JellyTV
+Comment=Jellyfin TV Client
+Exec=/usr/local/bin/jellytv
+Icon=jellytv
+Terminal=false
+Categories=AudioVideo;Video;Player;TV;
+StartupNotify=false";
+
+                File.WriteAllText(autostartFile, desktopEntry);
+                launchOnStartupStatus.Text = "[X]";
+                Console.WriteLine($"Created autostart file: {autostartFile}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to create autostart file: {ex.Message}");
+            }
+        }
     }
 
     private async void InitializeGamepadAsync()
@@ -501,42 +627,6 @@ public partial class MainWindow : Window
 
         Console.WriteLine("Back button pressed");
 
-        // If Bluetooth manage is showing, go back to settings
-        var bluetoothManageOverlay = this.FindControl<Border>("BluetoothManageOverlay");
-        if (bluetoothManageOverlay?.IsVisible == true)
-        {
-            HideBluetoothManage();
-            ShowSettings();
-            return;
-        }
-
-        // If Bluetooth pair is showing, go back to settings
-        var bluetoothPairOverlay = this.FindControl<Border>("BluetoothPairOverlay");
-        if (bluetoothPairOverlay?.IsVisible == true)
-        {
-            HideBluetoothPairing();
-            ShowSettings();
-            return;
-        }
-
-        // If video output selection is showing, go back to settings
-        var videoOutputOverlay = this.FindControl<Border>("VideoOutputOverlay");
-        if (videoOutputOverlay?.IsVisible == true)
-        {
-            HideVideoOutputSelection();
-            ShowSettings();
-            return;
-        }
-
-        // If audio output selection is showing, go back to settings
-        var audioOutputOverlay = this.FindControl<Border>("AudioOutputOverlay");
-        if (audioOutputOverlay?.IsVisible == true)
-        {
-            HideAudioOutputSelection();
-            ShowSettings();
-            return;
-        }
-
         // If settings is showing, hide it
         var settingsOverlay = this.FindControl<Border>("SettingsOverlay");
         if (settingsOverlay?.IsVisible == true)
@@ -716,23 +806,23 @@ public partial class MainWindow : Window
     private void ShowHomeMenu()
     {
         var menuOverlay = this.FindControl<Border>("HomeMenuOverlay");
-        var logoutButton = this.FindControl<Button>("LogoutButton");
         var settingsButton = this.FindControl<Button>("SettingsButton");
+        var logoutButton = this.FindControl<Button>("LogoutButton");
         var closeMenuButton = this.FindControl<Button>("CloseMenuButton");
 
         if (menuOverlay == null) return;
 
         // Wire up button events
-        if (logoutButton != null)
-        {
-            logoutButton.Click -= OnLogoutButtonClick;
-            logoutButton.Click += OnLogoutButtonClick;
-        }
-
         if (settingsButton != null)
         {
             settingsButton.Click -= OnSettingsButtonClick;
             settingsButton.Click += OnSettingsButtonClick;
+        }
+
+        if (logoutButton != null)
+        {
+            logoutButton.Click -= OnLogoutButtonClick;
+            logoutButton.Click += OnLogoutButtonClick;
         }
 
         if (closeMenuButton != null)
@@ -745,7 +835,7 @@ public partial class MainWindow : Window
         menuOverlay.UpdateLayout();
 
         // Focus the first button
-        logoutButton?.Focus();
+        settingsButton?.Focus();
 
         Console.WriteLine("Home menu shown");
     }
@@ -757,28 +847,6 @@ public partial class MainWindow : Window
         {
             menuOverlay.IsVisible = false;
             Console.WriteLine("Home menu hidden");
-        }
-    }
-
-    private void OnLogoutButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Logout button clicked");
-        HideHomeMenu();
-
-        // Call the logout command from the ViewModel
-        if (DataContext is MainWindowViewModel viewModel)
-        {
-            // Clear saved credentials
-            var credentialsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".jellytv_credentials");
-            if (File.Exists(credentialsPath))
-            {
-                File.Delete(credentialsPath);
-                Console.WriteLine("Credentials deleted");
-            }
-
-            // Reset authentication state
-            viewModel.IsAuthenticated = false;
-            Console.WriteLine("Logged out successfully");
         }
     }
 
@@ -799,10 +867,6 @@ public partial class MainWindow : Window
     {
         var settingsOverlay = this.FindControl<Border>("SettingsOverlay");
         var closeSettingsButton = this.FindControl<Button>("CloseSettingsButton");
-        var audioOutputButton = this.FindControl<Button>("AudioOutputButton");
-        var videoOutputButton = this.FindControl<Button>("VideoOutputButton");
-        var bluetoothPairButton = this.FindControl<Button>("BluetoothPairButton");
-        var bluetoothManageButton = this.FindControl<Button>("BluetoothManageButton");
 
         if (settingsOverlay == null) return;
 
@@ -813,36 +877,11 @@ public partial class MainWindow : Window
             closeSettingsButton.Click += OnCloseSettingsButtonClick;
         }
 
-        // Wire up settings option buttons
-        if (audioOutputButton != null)
-        {
-            audioOutputButton.Click -= OnAudioOutputButtonClick;
-            audioOutputButton.Click += OnAudioOutputButtonClick;
-        }
-
-        if (videoOutputButton != null)
-        {
-            videoOutputButton.Click -= OnVideoOutputButtonClick;
-            videoOutputButton.Click += OnVideoOutputButtonClick;
-        }
-
-        if (bluetoothPairButton != null)
-        {
-            bluetoothPairButton.Click -= OnBluetoothPairButtonClick;
-            bluetoothPairButton.Click += OnBluetoothPairButtonClick;
-        }
-
-        if (bluetoothManageButton != null)
-        {
-            bluetoothManageButton.Click -= OnBluetoothManageButtonClick;
-            bluetoothManageButton.Click += OnBluetoothManageButtonClick;
-        }
-
         settingsOverlay.IsVisible = true;
         settingsOverlay.UpdateLayout();
 
-        // Focus the first button
-        audioOutputButton?.Focus();
+        // Focus the close button
+        closeSettingsButton?.Focus();
 
         Console.WriteLine("Settings shown");
     }
@@ -863,549 +902,24 @@ public partial class MainWindow : Window
         HideSettings();
     }
 
-    private void OnAudioOutputButtonClick(object? sender, RoutedEventArgs e)
+    private void OnLogoutButtonClick(object? sender, RoutedEventArgs e)
     {
-        Console.WriteLine("Audio Output button clicked");
-        ShowAudioOutputSelection();
-    }
+        Console.WriteLine("Logout button clicked");
+        HideHomeMenu();
 
-    private void ShowAudioOutputSelection()
-    {
-        var audioOutputOverlay = this.FindControl<Border>("AudioOutputOverlay");
-        var audioDeviceList = this.FindControl<StackPanel>("AudioDeviceList");
-        var closeButton = this.FindControl<Button>("CloseAudioOutputButton");
-
-        if (audioOutputOverlay == null || audioDeviceList == null) return;
-
-        // Wire up close button
-        if (closeButton != null)
+        if (DataContext is ViewModels.MainWindowViewModel viewModel)
         {
-            closeButton.Click -= OnCloseAudioOutputButtonClick;
-            closeButton.Click += OnCloseAudioOutputButtonClick;
-        }
-
-        // Clear existing buttons
-        audioDeviceList.Children.Clear();
-
-        // Get audio devices
-        var devices = _audioService.GetAudioDevices();
-        Console.WriteLine($"Found {devices.Count} audio devices");
-
-        Button? firstButton = null;
-
-        foreach (var device in devices)
-        {
-            var button = new Button
+            // Clear credentials file
+            var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".jellytv_config.json");
+            if (File.Exists(configPath))
             {
-                Content = device.Name + (device.IsDefault ? " (Current)" : ""),
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
-                FontSize = 24,
-                Padding = new Thickness(20, 15),
-                Margin = new Thickness(0, 0, 0, 8),
-                Tag = device.Id,
-                Focusable = true,
-                IsTabStop = true
-            };
-
-            // Highlight the current default device
-            if (device.IsDefault)
-            {
-                button.Background = Avalonia.Media.Brushes.DarkGreen;
+                File.Delete(configPath);
+                Console.WriteLine("Credentials cleared");
             }
 
-            button.Click += OnAudioDeviceSelected;
-
-            audioDeviceList.Children.Add(button);
-
-            if (firstButton == null)
-                firstButton = button;
-        }
-
-        // Show overlay
-        HideSettings(); // Hide settings overlay first
-        audioOutputOverlay.IsVisible = true;
-        audioOutputOverlay.UpdateLayout();
-
-        // Focus first button
-        firstButton?.Focus();
-
-        Console.WriteLine("Audio output selection shown");
-    }
-
-    private void OnCloseAudioOutputButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Close audio output button clicked");
-        HideAudioOutputSelection();
-        ShowSettings(); // Go back to settings
-    }
-
-    private void HideAudioOutputSelection()
-    {
-        var audioOutputOverlay = this.FindControl<Border>("AudioOutputOverlay");
-        if (audioOutputOverlay != null)
-        {
-            audioOutputOverlay.IsVisible = false;
-            Console.WriteLine("Audio output selection hidden");
-        }
-    }
-
-    private void OnAudioDeviceSelected(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button button && button.Tag is string sinkName)
-        {
-            Console.WriteLine($"Audio device selected: {sinkName}");
-
-            if (_audioService.SetDefaultAudioDevice(sinkName))
-            {
-                Console.WriteLine("Audio device changed successfully");
-                // Refresh the list to update the "Current" indicator
-                ShowAudioOutputSelection();
-            }
-            else
-            {
-                Console.WriteLine("Failed to change audio device");
-            }
-        }
-    }
-
-    private void OnVideoOutputButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Video Output button clicked");
-        ShowVideoOutputSelection();
-    }
-
-    private void ShowVideoOutputSelection()
-    {
-        var videoOutputOverlay = this.FindControl<Border>("VideoOutputOverlay");
-        var videoOutputList = this.FindControl<StackPanel>("VideoOutputList");
-        var closeButton = this.FindControl<Button>("CloseVideoOutputButton");
-
-        if (videoOutputOverlay == null || videoOutputList == null) return;
-
-        // Wire up close button
-        if (closeButton != null)
-        {
-            closeButton.Click -= OnCloseVideoOutputButtonClick;
-            closeButton.Click += OnCloseVideoOutputButtonClick;
-        }
-
-        // Clear existing buttons
-        videoOutputList.Children.Clear();
-
-        // Get video outputs
-        var outputs = _videoService.GetVideoOutputs();
-        Console.WriteLine($"Found {outputs.Count} video outputs");
-
-        Button? firstButton = null;
-
-        foreach (var output in outputs)
-        {
-            var displayText = $"{output.Name} - {output.Resolution}";
-            if (output.IsPrimary) displayText += " (Primary)";
-            if (output.IsActive) displayText += " (Active)";
-
-            var button = new Button
-            {
-                Content = displayText,
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
-                FontSize = 24,
-                Padding = new Thickness(20, 15),
-                Margin = new Thickness(0, 0, 0, 8),
-                Tag = output,
-                Focusable = true,
-                IsTabStop = true
-            };
-
-            // Highlight the active/primary output
-            if (output.IsActive || output.IsPrimary)
-            {
-                button.Background = Avalonia.Media.Brushes.DarkGreen;
-            }
-
-            button.Click += OnVideoOutputSelected;
-
-            videoOutputList.Children.Add(button);
-
-            if (firstButton == null)
-                firstButton = button;
-        }
-
-        // Show overlay
-        HideSettings(); // Hide settings overlay first
-        videoOutputOverlay.IsVisible = true;
-        videoOutputOverlay.UpdateLayout();
-
-        // Focus first button
-        firstButton?.Focus();
-
-        Console.WriteLine("Video output selection shown");
-    }
-
-    private void OnCloseVideoOutputButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Close video output button clicked");
-        HideVideoOutputSelection();
-        ShowSettings(); // Go back to settings
-    }
-
-    private void HideVideoOutputSelection()
-    {
-        var videoOutputOverlay = this.FindControl<Border>("VideoOutputOverlay");
-        if (videoOutputOverlay != null)
-        {
-            videoOutputOverlay.IsVisible = false;
-            Console.WriteLine("Video output selection hidden");
-        }
-    }
-
-    private void OnVideoOutputSelected(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button button && button.Tag is VideoOutput output)
-        {
-            Console.WriteLine($"Video output selected: {output.Name}");
-
-            // If output has multiple resolutions, let user pick one
-            // For now, just enable it with auto resolution
-            if (_videoService.EnableVideoOutput(output.Name, true))
-            {
-                Console.WriteLine("Video output changed successfully");
-                // Refresh the list to update the active indicator
-                ShowVideoOutputSelection();
-            }
-            else
-            {
-                Console.WriteLine("Failed to change video output");
-            }
-        }
-    }
-
-    // Bluetooth Methods
-    private void OnBluetoothPairButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Bluetooth Pair button clicked");
-        ShowBluetoothPairing();
-    }
-
-    private async void ShowBluetoothPairing()
-    {
-        var bluetoothPairOverlay = this.FindControl<Border>("BluetoothPairOverlay");
-        var bluetoothDeviceList = this.FindControl<StackPanel>("BluetoothDeviceList");
-        var refreshButton = this.FindControl<Button>("RefreshBluetoothButton");
-        var closeButton = this.FindControl<Button>("CloseBluetoothPairButton");
-        var statusText = this.FindControl<TextBlock>("BluetoothScanStatus");
-
-        if (bluetoothPairOverlay == null || bluetoothDeviceList == null) return;
-
-        // Wire up buttons
-        if (refreshButton != null)
-        {
-            refreshButton.Click -= OnRefreshBluetoothButtonClick;
-            refreshButton.Click += OnRefreshBluetoothButtonClick;
-        }
-
-        if (closeButton != null)
-        {
-            closeButton.Click -= OnCloseBluetoothPairButtonClick;
-            closeButton.Click += OnCloseBluetoothPairButtonClick;
-        }
-
-        HideSettings();
-        bluetoothPairOverlay.IsVisible = true;
-        bluetoothPairOverlay.UpdateLayout();
-
-        // Start scanning
-        if (statusText != null)
-            statusText.Text = "Starting Bluetooth scan...";
-
-        await _bluetoothService.StartScanAsync();
-        await Task.Delay(5000); // Wait longer for devices to appear
-
-        await RefreshBluetoothDeviceList();
-
-        Console.WriteLine("Bluetooth pairing shown");
-    }
-
-    private async void OnRefreshBluetoothButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Refresh Bluetooth scan clicked");
-
-        // Restart the scan to discover new devices
-        await _bluetoothService.StopScanAsync();
-        await _bluetoothService.StartScanAsync();
-        await Task.Delay(5000); // Wait for devices to appear
-
-        await RefreshBluetoothDeviceList();
-    }
-
-    private async Task RefreshBluetoothDeviceList()
-    {
-        var bluetoothDeviceList = this.FindControl<StackPanel>("BluetoothDeviceList");
-        var statusText = this.FindControl<TextBlock>("BluetoothScanStatus");
-
-        if (bluetoothDeviceList == null) return;
-
-        bluetoothDeviceList.Children.Clear();
-
-        // Get available devices
-        var devices = await _bluetoothService.GetDevicesAsync();
-        Console.WriteLine($"Found {devices.Count} Bluetooth devices");
-
-        if (statusText != null)
-            statusText.Text = devices.Count > 0 ? $"Found {devices.Count} devices" : "No devices found. Make sure your device is discoverable.";
-
-        Button? firstButton = null;
-
-        // Show all devices, not just unpaired ones
-        foreach (var device in devices)
-        {
-            var displayText = device.Name;
-            if (!string.IsNullOrEmpty(device.DeviceType))
-                displayText += $" ({device.DeviceType})";
-
-            // Add status indicator
-            if (device.IsConnected)
-                displayText += " - Connected";
-            else if (device.IsPaired)
-                displayText += " - Paired";
-
-            var button = new Button
-            {
-                Content = displayText,
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
-                FontSize = 22,
-                Padding = new Thickness(20, 12),
-                Margin = new Thickness(0, 0, 0, 8),
-                Tag = device,
-                Focusable = true,
-                IsTabStop = true
-            };
-
-            button.Click += OnBluetoothDevicePairClick;
-
-            bluetoothDeviceList.Children.Add(button);
-
-            if (firstButton == null)
-                firstButton = button;
-        }
-
-        // If no devices found, focus on Refresh button as fallback
-        if (firstButton != null)
-        {
-            firstButton.Focus();
-        }
-        else
-        {
-            var refreshButton = this.FindControl<Button>("RefreshBluetoothButton");
-            refreshButton?.Focus();
-        }
-    }
-
-    private async void OnBluetoothDevicePairClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button button && button.Tag is BluetoothDevice device)
-        {
-            button.IsEnabled = false;
-
-            bool success = false;
-
-            if (device.IsConnected)
-            {
-                // Already connected, do nothing
-                Console.WriteLine($"Device {device.Name} is already connected");
-                button.IsEnabled = true;
-                return;
-            }
-            else if (device.IsPaired)
-            {
-                // Already paired, just connect
-                Console.WriteLine($"Connecting to already-paired device: {device.Name} ({device.Address})");
-                button.Content = $"Connecting to {device.Name}...";
-                success = await _bluetoothService.ConnectDeviceAsync(device.Address);
-            }
-            else
-            {
-                // Need to pair first
-                Console.WriteLine($"Pairing with device: {device.Name} ({device.Address})");
-                button.Content = $"Pairing with {device.Name}...";
-                success = await _bluetoothService.PairDeviceAsync(device.Address);
-
-                if (success)
-                {
-                    // Try to connect after pairing
-                    await _bluetoothService.ConnectDeviceAsync(device.Address);
-                }
-            }
-
-            if (success)
-            {
-                Console.WriteLine($"Successfully connected to {device.Name}");
-                // Refresh the list
-                await RefreshBluetoothDeviceList();
-            }
-            else
-            {
-                button.Content = $"Failed: {device.Name}";
-                button.IsEnabled = true;
-            }
-        }
-    }
-
-    private void OnCloseBluetoothPairButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Close Bluetooth pair button clicked");
-        HideBluetoothPairing();
-        ShowSettings();
-    }
-
-    private async void HideBluetoothPairing()
-    {
-        await _bluetoothService.StopScanAsync();
-
-        var bluetoothPairOverlay = this.FindControl<Border>("BluetoothPairOverlay");
-        if (bluetoothPairOverlay != null)
-        {
-            bluetoothPairOverlay.IsVisible = false;
-            Console.WriteLine("Bluetooth pairing hidden");
-        }
-    }
-
-    private void OnBluetoothManageButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Bluetooth Manage button clicked");
-        ShowBluetoothManage();
-    }
-
-    private async void ShowBluetoothManage()
-    {
-        var bluetoothManageOverlay = this.FindControl<Border>("BluetoothManageOverlay");
-        var pairedDeviceList = this.FindControl<StackPanel>("PairedDeviceList");
-        var closeButton = this.FindControl<Button>("CloseBluetoothManageButton");
-
-        if (bluetoothManageOverlay == null || pairedDeviceList == null) return;
-
-        // Wire up button
-        if (closeButton != null)
-        {
-            closeButton.Click -= OnCloseBluetoothManageButtonClick;
-            closeButton.Click += OnCloseBluetoothManageButtonClick;
-        }
-
-        HideSettings();
-        bluetoothManageOverlay.IsVisible = true;
-        bluetoothManageOverlay.UpdateLayout();
-
-        // Load paired devices
-        pairedDeviceList.Children.Clear();
-
-        var devices = await _bluetoothService.GetPairedDevicesAsync();
-        Console.WriteLine($"Found {devices.Count} paired devices");
-
-        Button? firstButton = null;
-
-        foreach (var device in devices)
-        {
-            var panel = new StackPanel
-            {
-                Orientation = Avalonia.Layout.Orientation.Horizontal,
-                Spacing = 10,
-                Margin = new Thickness(0, 0, 0, 8)
-            };
-
-            var infoText = new TextBlock
-            {
-                Text = $"{device.Name} {(device.IsConnected ? "(Connected)" : "")}",
-                FontSize = 20,
-                Foreground = Avalonia.Media.Brushes.White,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                Width = 500
-            };
-
-            var connectButton = new Button
-            {
-                Content = device.IsConnected ? "Disconnect" : "Connect",
-                FontSize = 18,
-                Padding = new Thickness(20, 10),
-                Tag = device,
-                Focusable = true,
-                IsTabStop = true
-            };
-
-            connectButton.Click += OnBluetoothDeviceConnectClick;
-
-            var removeButton = new Button
-            {
-                Content = "Remove",
-                FontSize = 18,
-                Padding = new Thickness(20, 10),
-                Tag = device,
-                Focusable = true,
-                IsTabStop = true,
-                Background = Avalonia.Media.Brushes.DarkRed
-            };
-
-            removeButton.Click += OnBluetoothDeviceRemoveClick;
-
-            panel.Children.Add(infoText);
-            panel.Children.Add(connectButton);
-            panel.Children.Add(removeButton);
-
-            pairedDeviceList.Children.Add(panel);
-
-            if (firstButton == null)
-                firstButton = connectButton;
-        }
-
-        firstButton?.Focus();
-
-        Console.WriteLine("Bluetooth manage shown");
-    }
-
-    private async void OnBluetoothDeviceConnectClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button button && button.Tag is BluetoothDevice device)
-        {
-            button.IsEnabled = false;
-
-            if (device.IsConnected)
-            {
-                await _bluetoothService.DisconnectDeviceAsync(device.Address);
-            }
-            else
-            {
-                await _bluetoothService.ConnectDeviceAsync(device.Address);
-            }
-
-            // Refresh the list
-            ShowBluetoothManage();
-        }
-    }
-
-    private async void OnBluetoothDeviceRemoveClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button button && button.Tag is BluetoothDevice device)
-        {
-            Console.WriteLine($"Removing device: {device.Name}");
-            await _bluetoothService.RemoveDeviceAsync(device.Address);
-
-            // Refresh the list
-            ShowBluetoothManage();
-        }
-    }
-
-    private void OnCloseBluetoothManageButtonClick(object? sender, RoutedEventArgs e)
-    {
-        Console.WriteLine("Close Bluetooth manage button clicked");
-        HideBluetoothManage();
-        ShowSettings();
-    }
-
-    private void HideBluetoothManage()
-    {
-        var bluetoothManageOverlay = this.FindControl<Border>("BluetoothManageOverlay");
-        if (bluetoothManageOverlay != null)
-        {
-            bluetoothManageOverlay.IsVisible = false;
-            Console.WriteLine("Bluetooth manage hidden");
+            // Set IsAuthenticated to false to return to login screen
+            viewModel.IsAuthenticated = false;
+            Console.WriteLine("User logged out");
         }
     }
 
