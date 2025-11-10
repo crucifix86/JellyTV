@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,6 +15,7 @@ namespace JellyTV.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly JellyfinClient _jellyfinClient;
+    private CancellationTokenSource? _libraryLoadCancellation;
 
     // Actions to control the VideoPlayerControl (set by MainWindow)
     public Action<string>? PlayVideoAction { get; set; }
@@ -67,6 +69,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private ObservableCollection<BaseItemDto> _episodes = new();
+
+    [ObservableProperty]
+    private string _librarySectionHeading = "Seasons";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowVideo))]
@@ -190,6 +195,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Console.WriteLine($"Item selected: {item.Name} (Type: {item.Type})");
 
+        // Handle Season type specially - it needs the parent series context
+        if (item.Type == "Season")
+        {
+            await SelectSeasonAsync(item);
+            return;
+        }
+
         // Load detailed info with cast
         if (item.Id != null)
         {
@@ -236,6 +248,83 @@ public partial class MainWindowViewModel : ViewModelBase
         SelectedItem = null;
         Seasons.Clear();
         Episodes.Clear();
+    }
+
+    [RelayCommand]
+    private async Task LoadLibrary(BaseItemDto? library)
+    {
+        if (library?.Id == null) return;
+
+        // Cancel any previous library load operation
+        _libraryLoadCancellation?.Cancel();
+        _libraryLoadCancellation?.Dispose();
+        _libraryLoadCancellation = new CancellationTokenSource();
+        var cancellationToken = _libraryLoadCancellation.Token;
+
+        Console.WriteLine($"Loading library: {library.Name}, CollectionType: {library.CollectionType}");
+
+        // Clear existing data
+        ShowDetailView = false;
+        ShowCastCrewView = false;
+        SelectedItem = null;
+        Seasons.Clear();
+        Episodes.Clear();
+
+        // Determine item type based on CollectionType (matching Jellyfin pattern)
+        string? includeItemTypes = null;
+
+        if (library.CollectionType == "movies")
+        {
+            includeItemTypes = "Movie";
+            LibrarySectionHeading = "Movies";
+        }
+        else if (library.CollectionType == "tvshows")
+        {
+            includeItemTypes = "Series";
+            LibrarySectionHeading = "Series";
+        }
+        else
+        {
+            // For other library types, show all items
+            LibrarySectionHeading = library.Name ?? "Items";
+        }
+
+        Console.WriteLine($"Fetching items with IncludeItemTypes={includeItemTypes}, Recursive=true");
+
+        // Call API with same parameters as Jellyfin (Recursive=true, sorted by SortName)
+        var result = await _jellyfinClient.GetItemsAsync(
+            parentId: library.Id,
+            includeItemTypes: includeItemTypes,
+            sortBy: "SortName",
+            recursive: true);
+
+        if (result?.Items != null && !cancellationToken.IsCancellationRequested)
+        {
+            Console.WriteLine($"Loaded {result.Items.Count} items from {library.Name}");
+
+            foreach (var item in result.Items)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Console.WriteLine("Library load cancelled");
+                    return;
+                }
+
+                // Load image for each item
+                if (item.Id != null)
+                {
+                    item.ImageBitmap = await _jellyfinClient.LoadImageAsync(item.Id, "Primary", 300, 450);
+                }
+
+                Seasons.Add(item);
+            }
+
+            Console.WriteLine($"Finished loading {Seasons.Count} items");
+
+            // Set up view
+            SelectedItem = library;
+            ShowDetailView = true;
+        }
     }
 
     [RelayCommand]

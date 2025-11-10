@@ -336,14 +336,14 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Seasons Section (only for TV Shows) -->
+                    <!-- Seasons Section (only for TV Shows) / Library Grid -->
                     <StackPanel Spacing="20" IsVisible="{Binding !!Seasons.Count}">
-                        <TextBlock Text="Seasons" Classes="heading"/>
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <TextBlock Text="{Binding LibrarySectionHeading}" Classes="heading"/>
+                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding Seasons}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="20"/>
+                                        <WrapPanel Orientation="Horizontal"/>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
@@ -351,7 +351,8 @@
                                         <Button Padding="0"
                                                 Background="Transparent"
                                                 BorderThickness="0"
-                                                Command="{Binding $parent[Window].DataContext.SelectSeasonCommand}"
+                                                Margin="10"
+                                                Command="{Binding $parent[Window].DataContext.SelectItemCommand}"
                                                 CommandParameter="{Binding}">
                                             <Border Classes="media-card" Width="200" Height="300" ClipToBounds="True">
                                                 <Panel>
@@ -562,6 +563,28 @@
                             Background="Transparent"
                             BorderThickness="0"/>
 
+                    <Border Height="2" Background="#FF333333" Margin="20,20"/>
+
+                    <!-- Library Navigation Buttons -->
+                    <ItemsControl Name="LibraryButtonsContainer" ItemsSource="{Binding Libraries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding Name}"
+                                        Tag="{Binding}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        FontSize="28"
+                                        Padding="30,20"
+                                        Focusable="True"
+                                        IsTabStop="True"
+                                        Background="Transparent"
+                                        BorderThickness="0"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Height="2" Background="#FF333333" Margin="20,20"/>
+
                     <Button Name="AppsButton"
                             Content="📱 Apps"
                             HorizontalAlignment="Stretch"
@@ -583,8 +606,6 @@
                             IsTabStop="True"
                             Background="Transparent"
                             BorderThickness="0"/>
-
-                    <Border Height="2" Background="#FF333333" Margin="20,20"/>
 
                     <Button Name="ShowDesktopButton"
                             Content="🖥 Show Desktop"

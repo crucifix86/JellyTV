@@ -178,7 +178,8 @@ public class JellyfinClient
         string? includeItemTypes = null,
         int? startIndex = null,
         int? limit = null,
-        string? sortBy = null)
+        string? sortBy = null,
+        bool recursive = true)
     {
         if (!IsAuthenticated) return null;
 
@@ -186,9 +187,11 @@ public class JellyfinClient
         {
             var queryParams = new System.Collections.Generic.List<string>
             {
-                "Recursive=true",
-                "Fields=BasicSyncInfo,Overview,ProductionYear"
+                "Fields=PrimaryImageAspectRatio,BasicSyncInfo,Overview,ProductionYear"
             };
+
+            // Jellyfin uses Recursive=true by default for library browsing
+            if (recursive) queryParams.Add("Recursive=true");
 
             if (parentId != null) queryParams.Add($"ParentId={parentId}");
             if (includeItemTypes != null) queryParams.Add($"IncludeItemTypes={includeItemTypes}");
@@ -197,8 +200,9 @@ public class JellyfinClient
             if (sortBy != null) queryParams.Add($"SortBy={sortBy}");
 
             var query = string.Join("&", queryParams);
-            var response = await _httpClient.GetFromJsonAsync<QueryResult<BaseItemDto>>(
-                $"/Users/{_userId}/Items?{query}");
+            var fullUrl = $"/Users/{_userId}/Items?{query}";
+            Console.WriteLine($"GetItemsAsync URL: {fullUrl}");
+            var response = await _httpClient.GetFromJsonAsync<QueryResult<BaseItemDto>>(fullUrl);
             return response;
         }
         catch (Exception ex)

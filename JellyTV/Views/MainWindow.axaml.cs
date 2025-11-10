@@ -932,6 +932,21 @@ StartupNotify=false";
         sidebarOverlay.PointerPressed -= OnSidebarOverlayClick;
         sidebarOverlay.PointerPressed += OnSidebarOverlayClick;
 
+        // Wire up library buttons
+        var libraryContainer = this.FindControl<ItemsControl>("LibraryButtonsContainer");
+        if (libraryContainer != null)
+        {
+            // Wait for ItemsControl to render its items
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                foreach (var button in libraryContainer.GetVisualDescendants().OfType<Button>())
+                {
+                    button.Click -= OnLibraryButtonClick;
+                    button.Click += OnLibraryButtonClick;
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
+        }
+
         sidebarOverlay.IsVisible = true;
         sidebarOverlay.UpdateLayout();
 
@@ -1004,12 +1019,27 @@ StartupNotify=false";
         }
     }
 
+    private void OnLibraryButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is JellyTV.Models.BaseItemDto library)
+        {
+            Console.WriteLine($"Library button clicked: {library.Name}");
+            HideSidebar();
+
+            if (DataContext is ViewModels.MainWindowViewModel viewModel)
+            {
+                viewModel.LoadLibraryCommand.Execute(library);
+            }
+        }
+    }
+
     private void OnAppsButtonClick(object? sender, RoutedEventArgs e)
     {
         Console.WriteLine("Apps button clicked");
         // Apps functionality not yet implemented
         HideSidebar();
     }
+
 
     private void OnSettingsButtonClick(object? sender, RoutedEventArgs e)
     {

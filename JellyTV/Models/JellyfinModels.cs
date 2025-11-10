@@ -38,6 +38,9 @@ public class BaseItemDto
     [JsonPropertyName("Type")]
     public string? Type { get; set; }
 
+    [JsonPropertyName("CollectionType")]
+    public string? CollectionType { get; set; }
+
     [JsonPropertyName("Overview")]
     public string? Overview { get; set; }
 
