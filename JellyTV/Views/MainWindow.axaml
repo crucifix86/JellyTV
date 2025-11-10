@@ -3,6 +3,7 @@
         xmlns:vm="using:JellyTV.ViewModels"
         xmlns:controls="using:JellyTV.Controls"
         xmlns:views="using:JellyTV.Views"
+        xmlns:converters="using:JellyTV.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1920" d:DesignHeight="1080"
@@ -14,6 +15,10 @@
         Height="1080"
         WindowState="Maximized"
         Background="#FF0F0F0F">
+
+    <Window.Resources>
+        <converters:PlayPauseConverter x:Key="PlayPauseConverter"/>
+    </Window.Resources>
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
@@ -181,7 +186,13 @@
         </Border>
 
         <!-- Home Screen (when authenticated) - TV App Layout -->
-        <Grid IsVisible="{Binding IsAuthenticated}" RowDefinitions="Auto,*">
+        <Grid RowDefinitions="Auto,*">
+            <Grid.IsVisible>
+                <MultiBinding Converter="{x:Static BoolConverters.And}">
+                    <Binding Path="IsAuthenticated"/>
+                    <Binding Path="!IsPlaying"/>
+                </MultiBinding>
+            </Grid.IsVisible>
 
         <!-- Main Home View - Full Screen -->
         <Grid IsVisible="{Binding !ShowDetailView}" Grid.RowSpan="2">
@@ -502,14 +513,16 @@
         </Border>
         </Grid>
 
-        <!-- MPV Player Control (always present, hidden when not playing) -->
-        <controls:MpvPlayerControl x:Name="MpvPlayer"
-                                   IsVisible="{Binding IsPlaying}"
-                                   Width="1920"
-                                   Height="1080" />
+        <!-- Video Player Control -->
+        <controls:VideoPlayerControl Name="VideoPlayer"
+                                      Grid.RowSpan="2"
+                                      IsVisible="{Binding IsPlaying}"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"/>
 
         <!-- On-Screen Keyboard Overlay -->
         <Border Name="KeyboardOverlay"
+                Grid.RowSpan="2"
                 IsVisible="False"
                 Background="#CC000000"
                 VerticalAlignment="Bottom"
@@ -519,6 +532,7 @@
 
         <!-- Slide-out Sidebar -->
         <Border Name="SidebarOverlay"
+                Grid.RowSpan="2"
                 IsVisible="False"
                 Background="#AA000000"
                 HorizontalAlignment="Stretch"
@@ -599,6 +613,7 @@
 
         <!-- Settings Overlay -->
         <Border Name="SettingsOverlay"
+                Grid.RowSpan="2"
                 IsVisible="False"
                 Background="#DD000000">
             <Border Background="#FF1A1A1A"
@@ -679,6 +694,36 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Video Playback Settings Section -->
+                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
+                                <StackPanel Spacing="15">
+                                    <TextBlock Text="Video Playback"
+                                              FontSize="32"
+                                              FontWeight="SemiBold"
+                                              Foreground="White"
+                                              Margin="0,0,0,10"/>
+
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="Hardware Acceleration"
+                                                  FontSize="24"
+                                                  Foreground="#FFCCCCCC"/>
+                                        <ComboBox Name="HardwareAccelerationComboBox"
+                                                 ItemsSource="{Binding HardwareAccelerationOptions}"
+                                                 SelectedItem="{Binding HardwareAcceleration}"
+                                                 FontSize="22"
+                                                 Padding="20,12"
+                                                 MinHeight="60"
+                                                 HorizontalAlignment="Stretch"
+                                                 Focusable="True"
+                                                 IsTabStop="True"/>
+                                        <TextBlock Text="⚠ Requires app restart to take effect"
+                                                  FontSize="18"
+                                                  Foreground="#FFFFAA00"
+                                                  Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
                         </StackPanel>
                     </ScrollViewer>
 
@@ -694,6 +739,132 @@
                             IsTabStop="True"/>
                 </Grid>
             </Border>
+        </Border>
+
+        <!-- Player Controls Overlay (Android TV Style) - DISABLED, using VideoPlayerControl's own controls -->
+        <Border Grid.RowSpan="2"
+                IsVisible="False"
+                Background="#BB000000"
+                VerticalAlignment="Stretch"
+                HorizontalAlignment="Stretch">
+            <Grid RowDefinitions="*,Auto" VerticalAlignment="Stretch">
+                <!-- Top area - clicking shows controls -->
+                <Border Grid.Row="0" Background="Transparent"/>
+
+                <!-- Bottom controls bar -->
+                <Border Grid.Row="1"
+                        Background="#DD000000"
+                        Padding="60,40">
+                    <StackPanel Spacing="30">
+                        <!-- Progress Bar -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="20">
+                            <TextBlock Grid.Column="0"
+                                      Text="{Binding FormattedPosition}"
+                                      FontSize="24"
+                                      Foreground="White"
+                                      VerticalAlignment="Center"/>
+                            <ProgressBar Grid.Column="1"
+                                        Value="{Binding PlaybackPosition}"
+                                        Maximum="{Binding PlaybackDuration}"
+                                        Height="12"
+                                        Background="#FF333333"
+                                        Foreground="#FF00A4DC"
+                                        VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2"
+                                      Text="{Binding FormattedDuration}"
+                                      FontSize="24"
+                                      Foreground="White"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- Control Buttons -->
+                        <StackPanel Orientation="Horizontal"
+                                   HorizontalAlignment="Center"
+                                   Spacing="30">
+                            <!-- Stop/Back Button -->
+                            <Button Name="StopButton"
+                                   Content="◼ Stop"
+                                   FontSize="28"
+                                   Padding="35,18"
+                                   Background="#FF333333"
+                                   Focusable="True"
+                                   IsTabStop="True"
+                                   Command="{Binding StopPlaybackCommand}"/>
+
+                            <!-- Seek Backward -->
+                            <Button Name="SeekBackButton"
+                                   Content="⏪ -10s"
+                                   FontSize="28"
+                                   Padding="35,18"
+                                   Background="#FF333333"
+                                   Focusable="True"
+                                   IsTabStop="True"
+                                   Command="{Binding SeekBackwardCommand}"/>
+
+                            <!-- Play/Pause -->
+                            <Button Name="PlayPauseButton"
+                                   Content="{Binding IsPaused, Converter={StaticResource PlayPauseConverter}}"
+                                   FontSize="32"
+                                   Padding="50,18"
+                                   Background="#FF00A4DC"
+                                   Focusable="True"
+                                   IsTabStop="True"
+                                   Command="{Binding TogglePlayPauseCommand}"/>
+
+                            <!-- Seek Forward -->
+                            <Button Name="SeekForwardButton"
+                                   Content="⏩ +10s"
+                                   FontSize="28"
+                                   Padding="35,18"
+                                   Background="#FF333333"
+                                   Focusable="True"
+                                   IsTabStop="True"
+                                   Command="{Binding SeekForwardCommand}"/>
+
+                            <!-- Hide Controls -->
+                            <Button Name="HideControlsButton"
+                                   Content="✕ Hide"
+                                   FontSize="28"
+                                   Padding="35,18"
+                                   Background="#FF333333"
+                                   Focusable="True"
+                                   IsTabStop="True"
+                                   Command="{Binding HideControlsCommand}"/>
+                        </StackPanel>
+
+                        <!-- Media Info -->
+                        <StackPanel Spacing="12" HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding SelectedItem.Name}"
+                                      FontSize="28"
+                                      FontWeight="SemiBold"
+                                      Foreground="White"
+                                      TextAlignment="Center"/>
+
+                            <!-- Playback Stats Panel -->
+                            <Border Background="#FF1A1A1A"
+                                    CornerRadius="6"
+                                    Padding="20,12"
+                                    HorizontalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="30">
+                                    <!-- Media info handled by VideoPlayerControl -->
+
+                                    <!-- Playback Mode -->
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Mode"
+                                                  FontSize="16"
+                                                  Foreground="#FF888888"
+                                                  TextAlignment="Center"/>
+                                        <TextBlock Text="Direct Play"
+                                                  FontSize="18"
+                                                  Foreground="#FF00FF00"
+                                                  TextAlignment="Center"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Border>
 
     </Grid>

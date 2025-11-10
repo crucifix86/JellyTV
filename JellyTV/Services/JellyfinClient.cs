@@ -245,7 +245,7 @@ public class JellyfinClient
     {
         if (string.IsNullOrEmpty(_serverUrl) || !IsAuthenticated || string.IsNullOrEmpty(_userId)) return null;
 
-        // Use proper Jellyfin streaming URL with direct play
+        // Use Jellyfin direct stream endpoint - simpler and more reliable
         return $"{_serverUrl}/Items/{itemId}/Download?api_key={_accessToken}";
     }
 
@@ -332,6 +332,47 @@ public class JellyfinClient
         catch (Exception ex)
         {
             Console.WriteLine($"Error getting item details: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task<BaseItemDto?> GetNextUpAsync(string seriesId)
+    {
+        if (!IsAuthenticated) return null;
+
+        try
+        {
+            // Use the NextUp endpoint to get the next episode to watch for a series
+            var response = await _httpClient.GetFromJsonAsync<QueryResult<BaseItemDto>>(
+                $"/Shows/NextUp?SeriesId={seriesId}&UserId={_userId}&Fields=Overview");
+
+            // Return the first next-up episode if available
+            if (response?.Items != null && response.Items.Count > 0)
+            {
+                return response.Items[0];
+            }
+
+            // If no next-up episode, try to get the first episode of the first season
+            Console.WriteLine("No next-up episode, getting first episode of series");
+            var seasons = await GetSeasonsAsync(seriesId);
+            if (seasons?.Items != null && seasons.Items.Count > 0)
+            {
+                var firstSeason = seasons.Items[0];
+                if (firstSeason.Id != null)
+                {
+                    var episodes = await GetEpisodesAsync(seriesId, firstSeason.Id);
+                    if (episodes?.Items != null && episodes.Items.Count > 0)
+                    {
+                        return episodes.Items[0];
+                    }
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting next up episode: {ex.Message}");
             return null;
         }
     }

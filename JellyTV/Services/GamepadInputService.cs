@@ -214,13 +214,14 @@ public class GamepadInputService : IDisposable
 
     private void HandleAxisEvent(byte axis, short value)
     {
-        Console.WriteLine($"RAW AXIS EVENT: axis={axis}, value={value}");
+        // Debug logging disabled for performance (fires hundreds of times per second)
+        // Console.WriteLine($"RAW AXIS EVENT: axis={axis}, value={value}");
 
         // Throttle axis events to prevent too rapid navigation
         var now = DateTime.Now;
         if ((now - _lastAxisEvent).TotalMilliseconds < AXIS_REPEAT_DELAY_MS)
         {
-            Console.WriteLine($"Axis event throttled (too soon after last event)");
+            // Console.WriteLine($"Axis event throttled (too soon after last event)");
             return;
         }
 

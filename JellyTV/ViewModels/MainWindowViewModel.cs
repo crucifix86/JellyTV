@@ -14,7 +14,14 @@ namespace JellyTV.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly JellyfinClient _jellyfinClient;
-    private readonly MediaPlayerService _mediaPlayer;
+
+    // Actions to control the VideoPlayerControl (set by MainWindow)
+    public Action<string>? PlayVideoAction { get; set; }
+    public Action? TogglePlayPauseAction { get; set; }
+    public Action? StopPlaybackAction { get; set; }
+    public Action<int>? SeekAction { get; set; }
+    public Func<long>? GetPositionFunc { get; set; }
+    public Func<long>? GetDurationFunc { get; set; }
 
     [ObservableProperty]
     private string _serverAddress = "";
@@ -62,12 +69,45 @@ public partial class MainWindowViewModel : ViewModelBase
     private ObservableCollection<BaseItemDto> _episodes = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowVideo))]
     private bool _isPlaying;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowVideo))]
+    private bool _showPlayerControls;
+
+    // Computed property to show video only when playing and controls are hidden
+    public bool ShowVideo => IsPlaying && !ShowPlayerControls;
+
+    [ObservableProperty]
+    private long _playbackPosition;
+
+    [ObservableProperty]
+    private long _playbackDuration;
+
+    [ObservableProperty]
+    private bool _isPaused;
+
+    [ObservableProperty]
+    private string _hardwareAcceleration = "Auto";
+
+    // VideoPlayerControl handles all media info and rendering
+
+    private System.Threading.Timer? _controlsHideTimer;
+    private System.Threading.Timer? _playbackUpdateTimer;
+
+    public List<string> HardwareAccelerationOptions { get; } = new List<string>
+    {
+        "Auto (Let VLC choose)",
+        "NVIDIA (NVDEC)",
+        "AMD/Intel (VA-API)",
+        "NVIDIA Legacy (VDPAU)",
+        "Disabled (Software only)"
+    };
 
     public MainWindowViewModel()
     {
         _jellyfinClient = new JellyfinClient();
-        _mediaPlayer = new MediaPlayerService();
 
         // Load saved credentials
         LoadCredentials();
@@ -92,6 +132,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     if (config.ContainsKey("ServerAddress")) ServerAddress = config["ServerAddress"];
                     if (config.ContainsKey("ServerPort")) ServerPort = config["ServerPort"];
                     if (config.ContainsKey("Username")) Username = config["Username"];
+                    if (config.ContainsKey("HardwareAcceleration")) HardwareAcceleration = config["HardwareAcceleration"];
                     if (config.ContainsKey("AccessToken") && config.ContainsKey("UserId"))
                     {
                         // Auto-login with saved token
@@ -126,7 +167,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 ["ServerPort"] = ServerPort,
                 ["Username"] = Username,
                 ["AccessToken"] = accessToken,
-                ["UserId"] = userId
+                ["UserId"] = userId,
+                ["HardwareAcceleration"] = HardwareAcceleration
             };
 
             var json = System.Text.Json.JsonSerializer.Serialize(config);
@@ -395,8 +437,38 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    partial void OnHardwareAccelerationChanged(string value)
+    {
+        // Save the hardware acceleration setting when it changes
+        try
+        {
+            var configPath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "JellyTV",
+                "config.json"
+            );
+
+            if (System.IO.File.Exists(configPath))
+            {
+                var json = System.IO.File.ReadAllText(configPath);
+                var config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                if (config != null)
+                {
+                    config["HardwareAcceleration"] = value;
+                    var updatedJson = System.Text.Json.JsonSerializer.Serialize(config);
+                    System.IO.File.WriteAllText(configPath, updatedJson);
+                    Console.WriteLine($"Hardware acceleration setting updated to: {value}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving hardware acceleration setting: {ex.Message}");
+        }
+    }
+
     [RelayCommand]
-    private void PlayItem(BaseItemDto? item)
+    private async Task PlayItem(BaseItemDto? item)
     {
         // Use the passed item if available, otherwise fall back to SelectedItem
         var itemToPlay = item ?? SelectedItem;
@@ -407,12 +479,136 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        // If it's a Series, get the next episode to play (resume or first unwatched)
+        if (itemToPlay.Type == "Series")
+        {
+            Console.WriteLine($"Series selected: {itemToPlay.Name}, getting next episode to play");
+            var nextEpisode = await _jellyfinClient.GetNextUpAsync(itemToPlay.Id);
+
+            if (nextEpisode != null)
+            {
+                itemToPlay = nextEpisode;
+                Console.WriteLine($"Found next episode: {nextEpisode.Name}");
+            }
+            else
+            {
+                Console.WriteLine("No next episode found for series");
+                return;
+            }
+        }
+
         // Build the media URL from Jellyfin
         var mediaUrl = _jellyfinClient.GetStreamUrl(itemToPlay.Id);
         Console.WriteLine($"Playing: {itemToPlay.Name}");
         Console.WriteLine($"URL: {mediaUrl}");
 
         IsPlaying = true;
-        _mediaPlayer.PlayMedia(mediaUrl);
+        IsPaused = false;
+
+        // Use VideoPlayerControl for playback
+        PlayVideoAction?.Invoke(mediaUrl);
+    }
+
+    // Player controls handled by VideoPlayerControl
+    [RelayCommand]
+    private void TogglePlayPause()
+    {
+        TogglePlayPauseAction?.Invoke();
+        IsPaused = !IsPaused;
+    }
+
+    [RelayCommand]
+    private void SeekForward()
+    {
+        SeekAction?.Invoke(10);
+    }
+
+    [RelayCommand]
+    private void SeekBackward()
+    {
+        SeekAction?.Invoke(-10);
+    }
+
+    [RelayCommand]
+    private void ShowControls()
+    {
+        Console.WriteLine($"ShowControls called: IsPlaying={IsPlaying}");
+        if (IsPlaying)
+        {
+            ShowPlayerControls = true;
+            Console.WriteLine($"Player controls shown");
+            ResetControlsHideTimer();
+        }
+        else
+        {
+            Console.WriteLine("Not playing - controls won't show");
+        }
+    }
+
+    [RelayCommand]
+    private void HideControls()
+    {
+        ShowPlayerControls = false;
+    }
+
+    [RelayCommand]
+    private void StopPlayback()
+    {
+        Console.WriteLine("StopPlayback called - setting IsPlaying to false");
+        // Call VideoPlayerControl to stop
+        StopPlaybackAction?.Invoke();
+        IsPlaying = false;
+        IsPaused = false;
+        ShowPlayerControls = false;
+        StopPlaybackUpdateTimer();
+        StopControlsHideTimer();
+        Console.WriteLine($"StopPlayback complete - IsPlaying={IsPlaying}");
+    }
+
+    private void StartPlaybackUpdateTimer()
+    {
+        StopPlaybackUpdateTimer();
+
+        // VideoPlayerControl manages its own playback timing
+        // No timer needed
+    }
+
+    private void StopPlaybackUpdateTimer()
+    {
+        _playbackUpdateTimer?.Dispose();
+        _playbackUpdateTimer = null;
+    }
+
+    private void ResetControlsHideTimer()
+    {
+        StopControlsHideTimer();
+
+        // Hide controls after 5 seconds of inactivity
+        _controlsHideTimer = new System.Threading.Timer(_ =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                ShowPlayerControls = false;
+            });
+        }, null, 5000, System.Threading.Timeout.Infinite);
+    }
+
+    private void StopControlsHideTimer()
+    {
+        _controlsHideTimer?.Dispose();
+        _controlsHideTimer = null;
+    }
+
+    public string FormattedPosition => FormatTime(PlaybackPosition);
+    public string FormattedDuration => FormatTime(PlaybackDuration);
+
+    private string FormatTime(long milliseconds)
+    {
+        var time = TimeSpan.FromMilliseconds(milliseconds);
+        if (time.TotalHours >= 1)
+        {
+            return time.ToString(@"h\:mm\:ss");
+        }
+        return time.ToString(@"m\:ss");
     }
 }

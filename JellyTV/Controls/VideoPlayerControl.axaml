@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:JellyTV.Controls"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="JellyTV.Controls.VideoPlayerControl"
+             x:DataType="controls:VideoPlayerControl"
+             Focusable="True"
+             IsTabStop="True">
+
+  <Grid>
+    <!-- Video surface -->
+    <Image Name="VideoImage" Stretch="Uniform" StretchDirection="Both"/>
+
+    <!-- Overlay container for subtitles and controls -->
+    <Grid Name="OverlayContainer">
+      <!-- ExoPlayer-style controls overlay -->
+      <Grid Name="ControlsOverlay" Background="#80000000" VerticalAlignment="Bottom"
+            IsVisible="{Binding ShowControls}">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Progress bar -->
+        <ProgressBar Name="ProgressBar" Grid.Row="0" Height="6"
+                     Value="{Binding ProgressPercent}" Maximum="100"
+                     Margin="20,10,20,10"/>
+
+        <!-- Control buttons -->
+        <Grid Grid.Row="1" Margin="120,0,20,20">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+
+          <!-- Left controls -->
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="15" VerticalAlignment="Center">
+            <Button Name="PlayPauseButton" Content="PLAY" Width="70" Height="50" FontSize="16" Foreground="White" Background="Transparent" BorderThickness="0" Padding="0" CornerRadius="0"/>
+            <TextBlock VerticalAlignment="Center" FontSize="16" Foreground="White" FontWeight="Medium">
+              <Run Text="{Binding CurrentTimeFormatted}"/><Run Text=" / "/><Run Text="{Binding TotalTimeFormatted}"/>
+            </TextBlock>
+          </StackPanel>
+
+          <!-- Right controls -->
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <!-- Volume control -->
+            <Button Name="VolumeButton" Content="VOL" Width="50" Height="40" FontSize="14" Foreground="White" Background="Transparent" BorderThickness="0" Padding="0" CornerRadius="0"/>
+            <Slider Name="VolumeSlider" Width="80" Minimum="0" Maximum="100" Value="100"
+                    VerticalAlignment="Center" Foreground="White"/>
+
+            <Button Name="SubtitleButton" Content="SUBS" Width="60" Height="50" FontSize="16" Foreground="White" Background="Transparent" BorderThickness="0" Padding="0" CornerRadius="0"/>
+            <Button Name="SettingsButton" Content="OPTS" Width="60" Height="50" FontSize="16" Foreground="White" Background="Transparent" BorderThickness="0" Padding="0" CornerRadius="0"/>
+            <Button Name="FullscreenButton" Content="FULL" Width="60" Height="50" FontSize="16" Foreground="White" Background="Transparent" BorderThickness="0" Padding="0" CornerRadius="0"/>
+          </StackPanel>
+        </Grid>
+      </Grid>
+
+      <!-- Subtitle overlay -->
+      <TextBlock Name="SubtitleText"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Bottom"
+                 Margin="0,0,0,140"
+                 FontSize="24"
+                 Foreground="White"
+                 Background="#80000000"
+                 Padding="10"
+                 TextAlignment="Center"/>
+    </Grid>
+  </Grid>
+</UserControl>

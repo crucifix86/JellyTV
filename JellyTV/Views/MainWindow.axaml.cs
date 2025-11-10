@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using JellyTV.Services;
 using JellyTV.ViewModels;
+using JellyTV.Controls;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,10 +19,14 @@ public partial class MainWindow : Window
 {
     private GamepadInputService? _gamepadService;
     private TextBox? _keyboardTargetTextBox;
+    private VideoPlayerControl? _videoPlayerControl;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        // Get reference to the VideoPlayerControl
+        _videoPlayerControl = this.FindControl<VideoPlayerControl>("VideoPlayer");
 
         // Wire up mouse movement to show cursor and detect left edge
         this.PointerMoved += (s, e) =>
@@ -82,30 +87,66 @@ public partial class MainWindow : Window
         // Wire up settings UI controls
         this.Loaded += OnLoaded;
 
-        // Wire up MPV player control
-        var mpvPlayer = this.FindControl<Controls.MpvPlayerControl>("MpvPlayer");
-        if (mpvPlayer != null)
-        {
-            mpvPlayer.AttachedToVisualTree += (s, e) =>
-            {
-                // When the control is attached, pass the native window handle to the media player service
-                if (mpvPlayer.NativeHandle != IntPtr.Zero && DataContext is ViewModels.MainWindowViewModel viewModel)
-                {
-                    var mediaPlayerField = viewModel.GetType().GetField("_mediaPlayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (mediaPlayerField != null)
-                    {
-                        var mediaPlayer = mediaPlayerField.GetValue(viewModel) as MediaPlayerService;
-                        mediaPlayer?.SetWindowHandle(mpvPlayer.NativeHandle);
-                    }
-                }
-            };
-        }
+        // VLC player control no longer needed for memory rendering
 
         // Watch for detail view changes to auto-focus Play button
         this.DataContextChanged += (s, e) =>
         {
             if (DataContext is ViewModels.MainWindowViewModel viewModel)
             {
+                // Wire up the VideoPlayerControl to the ViewModel
+                viewModel.PlayVideoAction = (url) =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        Console.WriteLine($"Playing video via VideoPlayerControl: {url}");
+
+                        // Make sure VideoPlayerControl is visible
+                        if (_videoPlayerControl != null)
+                        {
+                            _videoPlayerControl.IsVisible = true;
+                            Console.WriteLine("Set VideoPlayerControl visible");
+                        }
+
+                        _videoPlayerControl?.OpenFile(url);
+
+                        // Force focus to the VideoPlayerControl so gamepad input goes there
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            _videoPlayerControl?.Focus();
+                            Console.WriteLine("Forced focus to VideoPlayerControl");
+                        }, Avalonia.Threading.DispatcherPriority.Loaded);
+                    });
+                };
+
+                // Wire up playback control actions
+                viewModel.TogglePlayPauseAction = () =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        _videoPlayerControl?.TogglePause();
+                    });
+                };
+
+                viewModel.StopPlaybackAction = () =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        _videoPlayerControl?.Stop();
+                    });
+                };
+
+                viewModel.SeekAction = (seconds) =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        _videoPlayerControl?.Seek(seconds);
+                    });
+                };
+
+                viewModel.GetPositionFunc = () => _videoPlayerControl?.GetPosition() ?? 0;
+                viewModel.GetDurationFunc = () => _videoPlayerControl?.GetDuration() ?? 0;
+
                 viewModel.PropertyChanged += (sender, args) =>
                 {
                     if (args.PropertyName == nameof(viewModel.ShowDetailView) && viewModel.ShowDetailView)
@@ -339,6 +380,19 @@ StartupNotify=false";
         // Hide cursor when gamepad is used
         HideCursor();
 
+        // If video is playing, show its controls
+        if (DataContext is MainWindowViewModel viewModel && viewModel.IsPlaying && _videoPlayerControl != null)
+        {
+            // Trigger the VideoPlayerControl to show controls by simulating a key press
+            var keyEventArgs = new Avalonia.Input.KeyEventArgs
+            {
+                Key = key,
+                RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent
+            };
+            _videoPlayerControl.RaiseEvent(keyEventArgs);
+            Console.WriteLine("Triggered VideoPlayerControl KeyDown to show controls");
+        }
+
         // If keyboard is showing, route input to it
         var keyboardOverlay = this.FindControl<Border>("KeyboardOverlay");
         var keyboard = this.FindControl<OnScreenKeyboard>("OnScreenKeyboard");
@@ -526,8 +580,8 @@ StartupNotify=false";
 
     private void CollectFocusableButtons(Control control, List<Control> buttons)
     {
-        // Include both Button and TextBox controls for navigation
-        if ((control is Button || control is TextBox) && control.Focusable && control.IsVisible)
+        // Include Button, TextBox, and ComboBox controls for navigation
+        if ((control is Button || control is TextBox || control is ComboBox) && control.Focusable && control.IsVisible)
         {
             buttons.Add(control);
         }
@@ -569,6 +623,21 @@ StartupNotify=false";
         // Hide cursor when gamepad is used
         HideCursor();
 
+        // Check if sidebar is showing first - it has priority
+        var sidebarOverlay = this.FindControl<Border>("SidebarOverlay");
+        if (sidebarOverlay?.IsVisible == true)
+        {
+            // Let the normal button click handling work for sidebar
+            var fm = TopLevel.GetTopLevel(this)?.FocusManager;
+            var focusedElement = fm?.GetFocusedElement();
+            if (focusedElement is Button btn)
+            {
+                btn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                Console.WriteLine($"Sidebar button clicked: {btn.Name}");
+                return;
+            }
+        }
+
         // If keyboard is showing, route Select to it
         var keyboardOverlay = this.FindControl<Border>("KeyboardOverlay");
         var keyboard = this.FindControl<OnScreenKeyboard>("OnScreenKeyboard");
@@ -576,6 +645,15 @@ StartupNotify=false";
         if (keyboardOverlay?.IsVisible == true && keyboard != null)
         {
             keyboard.HandleGamepadInput("Select");
+            return;
+        }
+
+        // Check if video is playing and handle play/pause (after sidebar/keyboard checks)
+        if (DataContext is MainWindowViewModel viewModel && viewModel.IsPlaying)
+        {
+            // Toggle play/pause on VideoPlayerControl
+            viewModel.TogglePlayPauseCommand.Execute(null);
+            Console.WriteLine("A button: Toggle play/pause");
             return;
         }
 
@@ -648,19 +726,17 @@ StartupNotify=false";
         // First check if media is playing and stop it
         if (DataContext is ViewModels.MainWindowViewModel viewModel)
         {
-            // Access the MediaPlayerService via reflection to check if playing
-            var mediaPlayerField = viewModel.GetType().GetField("_mediaPlayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (mediaPlayerField != null)
+            if (viewModel.IsPlaying)
             {
-                var mediaPlayer = mediaPlayerField.GetValue(viewModel) as MediaPlayerService;
-                if (mediaPlayer != null && mediaPlayer.IsPlaying)
+                Console.WriteLine("Video is playing - stopping playback and returning to app");
+                _videoPlayerControl?.Stop(); // Directly stop the video player
+                if (_videoPlayerControl != null)
                 {
-                    Console.WriteLine("MPV is playing - stopping playback and returning to app");
-                    mediaPlayer.StopPlayback();
-                    viewModel.IsPlaying = false;
-
-                    return; // Don't execute back command, just stop playback
+                    _videoPlayerControl.IsVisible = false; // Manually hide the player
+                    Console.WriteLine("Manually hid VideoPlayerControl");
                 }
+                viewModel.StopPlaybackCommand.Execute(null);
+                return; // Don't execute back command, just stop playback
             }
 
             // If not playing, execute normal back navigation
@@ -908,6 +984,19 @@ StartupNotify=false";
 
         if (DataContext is ViewModels.MainWindowViewModel viewModel)
         {
+            // If video is playing, stop it first
+            if (viewModel.IsPlaying)
+            {
+                Console.WriteLine("Stopping video playback from Home button");
+                _videoPlayerControl?.Stop();
+                if (_videoPlayerControl != null)
+                {
+                    _videoPlayerControl.IsVisible = false;
+                }
+                viewModel.StopPlaybackCommand.Execute(null);
+            }
+
+            // Navigate to home
             if (viewModel.GoBackToHomeCommand?.CanExecute(null) == true)
             {
                 viewModel.GoBackToHomeCommand.Execute(null);
