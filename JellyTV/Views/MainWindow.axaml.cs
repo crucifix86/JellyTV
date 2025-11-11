@@ -164,33 +164,17 @@ public partial class MainWindow : Window
                     }
                 };
 
-                // Watch for episodes collection changes
+                // Watch for episodes collection changes - only focus when episodes are FIRST loaded
+                bool episodesFocused = false;
                 viewModel.Episodes.CollectionChanged += async (sender, args) =>
                 {
-                    if (viewModel.Episodes.Count > 0 && args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+                    // Only run once when first episode is added
+                    if (!episodesFocused && viewModel.Episodes.Count > 0 && args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
                     {
-                        // Episodes were loaded - switch to another window and back to reset focus
-                        await System.Threading.Tasks.Task.Delay(150);
+                        episodesFocused = true;
 
-                        // Switch to the desktop (or any other window), then back to JellyTV
-                        try
-                        {
-                            var processInfo = new System.Diagnostics.ProcessStartInfo
-                            {
-                                FileName = "bash",
-                                Arguments = "-c \"wmctrl -a Desktop 2>/dev/null || wmctrl -s 0; sleep 0.2; wmctrl -a JellyTV\"",
-                                UseShellExecute = false,
-                                CreateNoWindow = true
-                            };
-                            System.Diagnostics.Process.Start(processInfo);
-                            Console.WriteLine("Switched to desktop and back to JellyTV via wmctrl");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"wmctrl window switch failed: {ex.Message}");
-                        }
-
-                        await System.Threading.Tasks.Task.Delay(300);
+                        // Wait for UI to settle
+                        await System.Threading.Tasks.Task.Delay(200);
 
                         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                         {
@@ -208,6 +192,15 @@ public partial class MainWindow : Window
                                 }
                             }
                         }, Avalonia.Threading.DispatcherPriority.Background);
+                    }
+                };
+
+                // Reset the episodesFocused flag when Seasons changes (new show selected)
+                viewModel.Seasons.CollectionChanged += (sender, args) =>
+                {
+                    if (args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+                    {
+                        episodesFocused = false;
                     }
                 };
             }
