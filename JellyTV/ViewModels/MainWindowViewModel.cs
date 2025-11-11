@@ -302,28 +302,48 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             Console.WriteLine($"Loaded {result.Items.Count} items from {library.Name}");
 
+            // Add all items to UI immediately WITHOUT images
             foreach (var item in result.Items)
             {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    Console.WriteLine("Library load cancelled");
-                    return;
-                }
-
-                // Load image for each item
-                if (item.Id != null)
-                {
-                    item.ImageBitmap = await _jellyfinClient.LoadImageAsync(item.Id, "Primary", 300, 450);
-                }
-
                 Seasons.Add(item);
             }
 
-            Console.WriteLine($"Finished loading {Seasons.Count} items");
-
-            // Set up view
+            // Set up view immediately so user sees content
             SelectedItem = library;
             ShowDetailView = true;
+
+            Console.WriteLine($"Displaying {Seasons.Count} items, loading images in background...");
+
+            // Load images in background in batches of 10 concurrent downloads
+            var itemsList = result.Items.ToList();
+            for (int i = 0; i < itemsList.Count; i += 10)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Console.WriteLine("Library image load cancelled");
+                    return;
+                }
+
+                var batch = itemsList.Skip(i).Take(10);
+                var batchTasks = batch.Select(async item =>
+                {
+                    if (item.Id != null && !cancellationToken.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            item.ImageBitmap = await _jellyfinClient.LoadImageAsync(item.Id, "Primary", 300, 450);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error loading image for {item.Name}: {ex.Message}");
+                        }
+                    }
+                });
+
+                await Task.WhenAll(batchTasks);
+            }
+
+            Console.WriteLine($"Finished loading all images for {Seasons.Count} items");
         }
     }
 

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Avalonia.Media.Imaging;
 
@@ -27,7 +29,7 @@ public class UserDto
     public string? Name { get; set; }
 }
 
-public class BaseItemDto
+public class BaseItemDto : INotifyPropertyChanged
 {
     [JsonPropertyName("Id")]
     public string? Id { get; set; }
@@ -68,9 +70,21 @@ public class BaseItemDto
     [JsonPropertyName("People")]
     public List<PersonInfo>? People { get; set; }
 
-    // Computed property for image bitmap (not from JSON)
+    // Observable property for image bitmap (not from JSON)
+    private Bitmap? _imageBitmap;
     [JsonIgnore]
-    public Bitmap? ImageBitmap { get; set; }
+    public Bitmap? ImageBitmap
+    {
+        get => _imageBitmap;
+        set
+        {
+            if (_imageBitmap != value)
+            {
+                _imageBitmap = value;
+                OnPropertyChanged();
+            }
+        }
+    }
 
     [JsonIgnore]
     public List<Bitmap>? LibraryPreviewImages { get; set; }
@@ -85,6 +99,13 @@ public class BaseItemDto
             var actors = People.Where(p => p.Type == "Actor").Take(5).Select(p => p.Name);
             return string.Join(", ", actors);
         }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
 
