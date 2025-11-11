@@ -56,18 +56,43 @@ public class GamepadInputService : IDisposable
         if (_deviceStream != null)
             return;
 
-        try
-        {
-            _deviceStream = new FileStream(_devicePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            _cancellationTokenSource = new CancellationTokenSource();
+        _cancellationTokenSource = new CancellationTokenSource();
 
-            Console.WriteLine($"Gamepad connected: {_devicePath}");
+        // Start background task that continuously tries to connect/reconnect
+        _readTask = Task.Run(() => TryConnectAndReadAsync(_cancellationTokenSource.Token));
+    }
 
-            _readTask = Task.Run(() => ReadGamepadInputAsync(_cancellationTokenSource.Token));
-        }
-        catch (Exception ex)
+    private async Task TryConnectAndReadAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
         {
-            Console.WriteLine($"Failed to open gamepad device {_devicePath}: {ex.Message}");
+            try
+            {
+                if (File.Exists(_devicePath))
+                {
+                    _deviceStream = new FileStream(_devicePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    Console.WriteLine($"Gamepad connected: {_devicePath}");
+
+                    // Start reading from the connected device
+                    await ReadGamepadInputAsync(cancellationToken);
+
+                    // If we get here, the device disconnected
+                    _deviceStream?.Dispose();
+                    _deviceStream = null;
+                }
+                else
+                {
+                    Console.WriteLine($"Waiting for gamepad device {_devicePath}...");
+                    await Task.Delay(2000, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Gamepad connection error: {ex.Message}. Retrying in 2 seconds...");
+                _deviceStream?.Dispose();
+                _deviceStream = null;
+                await Task.Delay(2000, cancellationToken);
+            }
         }
     }
 
@@ -118,47 +143,7 @@ public class GamepadInputService : IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"Gamepad disconnected or error: {ex.Message}");
-
-            // Clean up the disconnected stream
-            _deviceStream?.Dispose();
-            _deviceStream = null;
-
-            // Try to reconnect if not cancelled
-            if (!cancellationToken.IsCancellationRequested)
-            {
-                Console.WriteLine("Attempting to reconnect to gamepad in 2 seconds...");
-                await Task.Delay(2000, cancellationToken);
-                await TryReconnectAsync(cancellationToken);
-            }
-        }
-    }
-
-    private async Task TryReconnectAsync(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                if (File.Exists(_devicePath))
-                {
-                    _deviceStream = new FileStream(_devicePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    Console.WriteLine($"Gamepad reconnected: {_devicePath}");
-
-                    // Continue reading from the reconnected device
-                    await ReadGamepadInputAsync(cancellationToken);
-                    break;
-                }
-                else
-                {
-                    Console.WriteLine($"Gamepad device not found, retrying in 2 seconds...");
-                    await Task.Delay(2000, cancellationToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Reconnection attempt failed: {ex.Message}. Retrying in 2 seconds...");
-                await Task.Delay(2000, cancellationToken);
-            }
+            // Device disconnected - return to let TryConnectAndReadAsync retry connection
         }
     }
 
