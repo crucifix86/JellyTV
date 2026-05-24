@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Input;
@@ -277,7 +278,19 @@ public class GamepadInputService : IDisposable
     public void Dispose()
     {
         _cancellationTokenSource?.Cancel();
-        _readTask?.Wait(1000);
+        try
+        {
+            // ReadAsync surfaces OperationCanceledException when we cancel the
+            // token mid-read; Task.Wait re-throws it wrapped in AggregateException.
+            // Swallow that one case — anything else is a real bug worth seeing.
+            _readTask?.Wait(1000);
+        }
+        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
+        {
+        }
+        catch (OperationCanceledException)
+        {
+        }
         _deviceStream?.Dispose();
         _cancellationTokenSource?.Dispose();
 
