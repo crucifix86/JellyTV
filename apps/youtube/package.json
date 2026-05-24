@@ -1,0 +1,14 @@
+{
+  "name": "jellytv-youtube",
+  "version": "0.1.0",
+  "description": "YouTube TV sub-app for JellyTV — wraps youtube.com/tv in a kiosk Electron window.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:wayland": "electron . --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

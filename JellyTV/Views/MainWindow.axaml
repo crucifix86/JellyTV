@@ -762,6 +762,66 @@
             </Border>
         </Border>
 
+        <!-- Apps Overlay -->
+        <Border Name="AppsOverlay"
+                Grid.RowSpan="2"
+                IsVisible="False"
+                Background="#DD000000">
+            <Border Background="#FF1A1A1A"
+                    CornerRadius="12"
+                    Padding="60"
+                    MaxWidth="900"
+                    MaxHeight="700"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Row="0"
+                              Text="Apps"
+                              FontSize="42"
+                              FontWeight="Bold"
+                              Foreground="White"
+                              HorizontalAlignment="Center"
+                              Margin="0,0,0,30"/>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button Name="YouTubeAppButton"
+                                    Width="220"
+                                    Height="220"
+                                    Margin="15"
+                                    Background="#FFCC0000"
+                                    BorderThickness="0"
+                                    CornerRadius="12"
+                                    Focusable="True"
+                                    IsTabStop="True">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+                                    <TextBlock Text="▶"
+                                              FontSize="72"
+                                              Foreground="White"
+                                              HorizontalAlignment="Center"/>
+                                    <TextBlock Text="YouTube"
+                                              FontSize="24"
+                                              FontWeight="SemiBold"
+                                              Foreground="White"
+                                              HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </WrapPanel>
+                    </ScrollViewer>
+
+                    <Button Grid.Row="2"
+                            Name="CloseAppsButton"
+                            Content="Close"
+                            HorizontalAlignment="Center"
+                            FontSize="28"
+                            Padding="40,15"
+                            Margin="0,30,0,0"
+                            Focusable="True"
+                            IsTabStop="True"/>
+                </Grid>
+            </Border>
+        </Border>
+
         <!-- Player Controls Overlay (Android TV Style) - DISABLED, using VideoPlayerControl's own controls -->
         <Border Grid.RowSpan="2"
                 IsVisible="False"

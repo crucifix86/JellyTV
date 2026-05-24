@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private GamepadInputService? _gamepadService;
     private TextBox? _keyboardTargetTextBox;
     private VideoPlayerControl? _videoPlayerControl;
+    private readonly AppLauncherService _appLauncher = new();
 
     public MainWindow()
     {
@@ -1029,8 +1030,77 @@ StartupNotify=false";
     private void OnAppsButtonClick(object? sender, RoutedEventArgs e)
     {
         Console.WriteLine("Apps button clicked");
-        // Apps functionality not yet implemented
         HideSidebar();
+        ShowApps();
+    }
+
+    private void ShowApps()
+    {
+        var appsOverlay = this.FindControl<Border>("AppsOverlay");
+        var youtubeButton = this.FindControl<Button>("YouTubeAppButton");
+        var closeAppsButton = this.FindControl<Button>("CloseAppsButton");
+
+        if (appsOverlay == null) return;
+
+        if (youtubeButton != null)
+        {
+            youtubeButton.Click -= OnYouTubeAppClick;
+            youtubeButton.Click += OnYouTubeAppClick;
+        }
+
+        if (closeAppsButton != null)
+        {
+            closeAppsButton.Click -= OnCloseAppsClick;
+            closeAppsButton.Click += OnCloseAppsClick;
+        }
+
+        appsOverlay.IsVisible = true;
+        appsOverlay.UpdateLayout();
+        youtubeButton?.Focus();
+
+        Console.WriteLine("Apps overlay shown");
+    }
+
+    private void HideApps()
+    {
+        var appsOverlay = this.FindControl<Border>("AppsOverlay");
+        if (appsOverlay != null)
+        {
+            appsOverlay.IsVisible = false;
+            Console.WriteLine("Apps overlay hidden");
+        }
+    }
+
+    private void OnCloseAppsClick(object? sender, RoutedEventArgs e)
+    {
+        HideApps();
+    }
+
+    private async void OnYouTubeAppClick(object? sender, RoutedEventArgs e)
+    {
+        Console.WriteLine("YouTube app launch requested");
+        HideApps();
+
+        // Refocus JellyTV when the sub-app exits — Wayland will already
+        // raise us when Electron quits, but Activate() ensures keyboard focus
+        // returns to whatever was focused before launch.
+        void OnExit()
+        {
+            _appLauncher.AppExited -= OnExit;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Activate();
+                Console.WriteLine("YouTube exited — JellyTV refocused");
+            });
+        }
+        _appLauncher.AppExited += OnExit;
+
+        var started = await _appLauncher.LaunchYouTubeAsync();
+        if (!started)
+        {
+            _appLauncher.AppExited -= OnExit;
+            Console.WriteLine("YouTube launch failed — check apps/youtube install");
+        }
     }
 
 
