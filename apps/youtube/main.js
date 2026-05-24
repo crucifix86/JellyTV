@@ -42,6 +42,58 @@ function createWindow() {
 
   mainWindow.loadURL(YOUTUBE_TV_URL, { userAgent: TV_USER_AGENT });
 
+  // Double-tap Back to exit to JellyTV.
+  //
+  // YouTube TV swallows Back/Escape for its own internal navigation (video →
+  // channel → home tabs), so a single press can't reliably mean "exit the
+  // sub-app." Android TV's convention is the same: two Backs in quick
+  // succession quits, anything slower stays inside the app. First back press
+  // also shows a small toast so the user knows the second press will exit.
+  const DOUBLE_BACK_WINDOW_MS = 1200;
+  let lastBackAt = 0;
+
+  // Self-contained snippet executed inside the YouTube page. Creates the
+  // toast element on first call and reuses it after that.
+  const showToastJs = `(() => {
+    const id = '__jellytv_exit_toast';
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      el.style.cssText = [
+        'position:fixed','bottom:64px','left:50%','transform:translateX(-50%)',
+        'background:rgba(0,0,0,0.85)','color:#fff','padding:14px 28px',
+        'border-radius:10px','font:500 22px/1 Roboto,Arial,sans-serif',
+        'z-index:2147483647','pointer-events:none',
+        'transition:opacity 180ms ease','opacity:0',
+      ].join(';');
+      el.textContent = 'Press Back again to exit';
+      document.body.appendChild(el);
+    }
+    el.style.opacity = '1';
+    if (el.__t) clearTimeout(el.__t);
+    el.__t = setTimeout(() => { el.style.opacity = '0'; }, 1100);
+  })();`;
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const isBack = input.key === 'BrowserBack'
+      || input.key === 'Escape'
+      || input.code === 'Escape'
+      || input.key === 'Backspace';
+    if (!isBack) return;
+
+    const now = Date.now();
+    if (now - lastBackAt < DOUBLE_BACK_WINDOW_MS) {
+      console.log('[youtube-tv] double-back → exit');
+      event.preventDefault();
+      app.quit();
+      return;
+    }
+    lastBackAt = now;
+    mainWindow.webContents.executeJavaScript(showToastJs).catch(() => {});
+  });
+
   // Keep navigation locked to youtube.com — block accidental exits to ads,
   // login redirects to other Google properties, etc. (Google auth flows
   // stay on accounts.google.com, which we allowlist.)

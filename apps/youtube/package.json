@@ -4,6 +4,7 @@
   "description": "YouTube TV sub-app for JellyTV — wraps youtube.com/tv in a kiosk Electron window.",
   "main": "main.js",
   "scripts": {
+    "postinstall": "node scripts/ensure-electron.js",
     "start": "electron .",
     "start:wayland": "electron . --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations"
   },
