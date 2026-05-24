@@ -22,7 +22,21 @@ public unsafe class FFmpegDemuxer : IDisposable
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            return "/usr/lib/x86_64-linux-gnu";
+            // Probe distro-specific paths — Debian/Ubuntu use multiarch, Arch/Fedora use /usr/lib.
+            string[] candidates =
+            {
+                "/usr/lib/x86_64-linux-gnu",
+                "/usr/lib64",
+                "/usr/lib",
+            };
+            foreach (var path in candidates)
+            {
+                if (Directory.Exists(path) && Directory.GetFiles(path, "libavformat.so*").Length > 0)
+                {
+                    return path;
+                }
+            }
+            return "/usr/lib";
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
