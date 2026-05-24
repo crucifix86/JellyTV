@@ -712,6 +712,35 @@
                                                       VerticalAlignment="Center"/>
                                         </Grid>
                                     </Button>
+
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                                        <TextBlock Grid.Column="0"
+                                                  Text="Version"
+                                                  FontSize="24"
+                                                  Foreground="#FFCCCCCC"
+                                                  VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1"
+                                                  Name="VersionLabel"
+                                                  Text="—"
+                                                  FontSize="24"
+                                                  Foreground="White"
+                                                  VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Button Name="CheckForUpdatesButton"
+                                            Content="Check for Updates"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="24"
+                                            Padding="20,12"
+                                            Focusable="True"
+                                            IsTabStop="True"/>
+
+                                    <TextBlock Name="UpdateStatusLabel"
+                                              Text=""
+                                              FontSize="20"
+                                              Foreground="#FFCCCCCC"
+                                              TextWrapping="Wrap"
+                                              IsVisible="False"/>
                                 </StackPanel>
                             </Border>
 

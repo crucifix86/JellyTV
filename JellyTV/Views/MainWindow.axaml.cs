@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private TextBox? _keyboardTargetTextBox;
     private VideoPlayerControl? _videoPlayerControl;
     private readonly AppLauncherService _appLauncher = new();
+    private readonly UpdaterService _updater = new();
 
     public MainWindow()
     {
@@ -40,6 +41,34 @@ public partial class MainWindow : Window
             {
                 ShowSidebar();
             }
+        };
+
+        // TV remote keys (Bluetooth/IR receivers surface as keyboard events).
+        // Routes to the same handlers the gamepad uses so behavior stays in
+        // one place. Avalonia handles arrow/Enter focus nav for free — we
+        // only intercept the keys it doesn't already cover.
+        AddHandler(KeyDownEvent, OnRemoteKeyDown, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // On Wayland the window can be "activated" (compositor focuses it)
+        // without any inner element holding keyboard focus — keys then go to
+        // the window with nothing to navigate. Force focus to a sensible
+        // default whenever we get reactivated.
+        Activated += (s, e) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (FocusManager?.GetFocusedElement() is Control existing && existing != this)
+                {
+                    return; // Something already has focus.
+                }
+                var firstButton = GetAllFocusableButtons(this)
+                    .FirstOrDefault(b => b.IsVisible && b.IsEffectivelyVisible);
+                firstButton?.Focus();
+                if (firstButton != null)
+                {
+                    Console.WriteLine($"Activated → focused {firstButton.Name ?? firstButton.GetType().Name}");
+                }
+            });
         };
 
         // Setup on-screen keyboard for login textboxes
@@ -356,6 +385,93 @@ StartupNotify=false";
         await _gamepadService.StartAsync();
     }
 
+    private void OnRemoteKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Don't hijack keys when a text field is being typed into (login screen, etc.).
+        // The on-screen keyboard surfaces its own focus, so this only matters for
+        // physical/remote keyboards driving a TextBox directly.
+        if (FocusManager?.GetFocusedElement() is TextBox)
+        {
+            // Escape still allowed through so back-out works even mid-type.
+            if (e.Key != Key.Escape) return;
+        }
+
+        // If something downstream already handled it, don't re-act.
+        if (e.Handled) return;
+
+        // Route arrow keys through the same nav logic the gamepad uses.
+        // Avalonia's built-in focus nav is fragile when nothing has focus yet
+        // (window focused but no inner element), so use the spatial+default-focus
+        // logic in HandleGamepadNavigation instead. Set Handled=True to stop
+        // Avalonia's default focus nav from also firing on the same press.
+        switch (e.Key)
+        {
+            case Key.Up:
+            case Key.Down:
+            case Key.Left:
+            case Key.Right:
+                HandleGamepadNavigation(e.Key);
+                e.Handled = true;
+                return;
+        }
+
+        // Enter/OK on the remote → invoke gamepad-select handler (same as A button).
+        if (e.Key == Key.Enter)
+        {
+            HandleGamepadSelect();
+            e.Handled = true;
+            return;
+        }
+
+        switch (e.Key)
+        {
+            // Back: most TV remotes map "Back" to Escape; some to BackSpace
+            // or BrowserBack (BLE HID remotes often use the latter).
+            case Key.Escape:
+            case Key.Back:
+            case Key.BrowserBack:
+                Console.WriteLine($"Remote: Back ({e.Key})");
+                HandleGamepadBack();
+                e.Handled = true;
+                break;
+
+            // Menu / Apps button: parity with gamepad R1 (toggle sidebar).
+            case Key.F10:
+            case Key.Apps:
+                Console.WriteLine($"Remote: Menu ({e.Key}) — toggling sidebar");
+                OnSidebarToggle();
+                e.Handled = true;
+                break;
+
+            // Home button on the remote.
+            case Key.BrowserHome:
+            case Key.Home:
+                Console.WriteLine($"Remote: Home ({e.Key})");
+                HandleGamepadHome();
+                e.Handled = true;
+                break;
+
+            // Media keys: play/pause toggles, stop hides the player.
+            case Key.MediaPlayPause:
+                if (DataContext is MainWindowViewModel vmPlay && vmPlay.IsPlaying)
+                {
+                    Console.WriteLine($"Remote: Media play/pause ({e.Key})");
+                    vmPlay.TogglePlayPauseCommand.Execute(null);
+                    e.Handled = true;
+                }
+                break;
+
+            case Key.MediaStop:
+                if (DataContext is MainWindowViewModel vmStop && vmStop.IsPlaying)
+                {
+                    Console.WriteLine("Remote: Media stop");
+                    HandleGamepadBack();
+                    e.Handled = true;
+                }
+                break;
+        }
+    }
+
     private void HideCursor()
     {
         // Set cursor to None (invisible)
@@ -439,14 +555,32 @@ StartupNotify=false";
 
         Console.WriteLine($"Focus navigation: {key} from {focused.GetType().Name}");
 
-        // Handle directional navigation with spatial logic
+        // Handle directional navigation with spatial logic.
+        // Android-TV pattern: pressing Left at the leftmost item reveals the
+        // sidebar; pressing Right while in the sidebar closes it. Lets you
+        // drive the whole UI from a remote that has no dedicated Menu key.
+        var sidebarOverlay = this.FindControl<Border>("SidebarOverlay");
+        bool sidebarOpen = sidebarOverlay?.IsVisible == true;
+
         switch (key)
         {
             case Key.Left:
-                MoveFocusSpatial(focused, -1, 0);
+                if (!sidebarOpen && !MoveFocusSpatial(focused, -1, 0))
+                {
+                    Console.WriteLine("Left at leftmost edge → opening sidebar");
+                    ShowSidebar();
+                }
                 break;
             case Key.Right:
-                MoveFocusSpatial(focused, 1, 0);
+                if (sidebarOpen)
+                {
+                    Console.WriteLine("Right while sidebar open → closing sidebar");
+                    HideSidebar();
+                }
+                else
+                {
+                    MoveFocusSpatial(focused, 1, 0);
+                }
                 break;
             case Key.Up:
                 MoveFocusSpatial(focused, 0, -1);
@@ -457,7 +591,7 @@ StartupNotify=false";
         }
     }
 
-    private void MoveFocusSpatial(Control current, int deltaX, int deltaY)
+    private bool MoveFocusSpatial(Control current, int deltaX, int deltaY)
     {
         // Get all focusable buttons in the window
         var allButtons = GetAllFocusableButtons(this);
@@ -475,7 +609,7 @@ StartupNotify=false";
         if (allButtons.Count == 0)
         {
             Console.WriteLine("NO BUTTONS FOUND - returning");
-            return;
+            return false;
         }
 
         // Get current button's center position using visual tree
@@ -483,7 +617,7 @@ StartupNotify=false";
         if (currentCenter == null)
         {
             Console.WriteLine("CURRENT CENTER IS NULL - returning");
-            return;
+            return false;
         }
 
         Console.WriteLine($"Current center position: {currentCenter.Value}");
@@ -542,12 +676,13 @@ StartupNotify=false";
             bestMatch.Focus();
             EnsureVisible(bestMatch);
             Console.WriteLine($"Focus moved successfully");
+            Console.WriteLine($"=== END SPATIAL NAV DEBUG ===");
+            return true;
         }
-        else
-        {
-            Console.WriteLine($"NO SUITABLE TARGET FOUND for direction ({deltaX},{deltaY})");
-        }
+
+        Console.WriteLine($"NO SUITABLE TARGET FOUND for direction ({deltaX},{deltaY})");
         Console.WriteLine($"=== END SPATIAL NAV DEBUG ===");
+        return false;
     }
 
     private Avalonia.Point? GetVisualCenter(Control control)
@@ -1115,6 +1250,9 @@ StartupNotify=false";
     {
         var settingsOverlay = this.FindControl<Border>("SettingsOverlay");
         var closeSettingsButton = this.FindControl<Button>("CloseSettingsButton");
+        var versionLabel = this.FindControl<TextBlock>("VersionLabel");
+        var checkForUpdatesButton = this.FindControl<Button>("CheckForUpdatesButton");
+        var updateStatusLabel = this.FindControl<TextBlock>("UpdateStatusLabel");
 
         if (settingsOverlay == null) return;
 
@@ -1125,6 +1263,23 @@ StartupNotify=false";
             closeSettingsButton.Click += OnCloseSettingsButtonClick;
         }
 
+        if (versionLabel != null)
+        {
+            versionLabel.Text = _updater.CurrentVersion.ToString();
+        }
+
+        if (checkForUpdatesButton != null)
+        {
+            checkForUpdatesButton.Click -= OnCheckForUpdatesClick;
+            checkForUpdatesButton.Click += OnCheckForUpdatesClick;
+        }
+
+        if (updateStatusLabel != null)
+        {
+            updateStatusLabel.IsVisible = false;
+            updateStatusLabel.Text = "";
+        }
+
         settingsOverlay.IsVisible = true;
         settingsOverlay.UpdateLayout();
 
@@ -1132,6 +1287,52 @@ StartupNotify=false";
         closeSettingsButton?.Focus();
 
         Console.WriteLine("Settings shown");
+    }
+
+    private async void OnCheckForUpdatesClick(object? sender, RoutedEventArgs e)
+    {
+        var button = sender as Button;
+        var status = this.FindControl<TextBlock>("UpdateStatusLabel");
+
+        if (status != null)
+        {
+            status.Foreground = Avalonia.Media.Brushes.LightGray;
+            status.Text = "Checking…";
+            status.IsVisible = true;
+        }
+        if (button != null) button.IsEnabled = false;
+
+        var result = await _updater.CheckForUpdateAsync();
+
+        if (status == null)
+        {
+            if (button != null) button.IsEnabled = true;
+            return;
+        }
+
+        if (result.IsError)
+        {
+            status.Foreground = Avalonia.Media.Brushes.OrangeRed;
+            status.Text = $"Update check failed: {result.ErrorMessage}";
+        }
+        else if (result.HasUpdate)
+        {
+            status.Foreground = Avalonia.Media.Brushes.LightGreen;
+            status.Text = $"Update available: {result.LatestVersion} (you have {result.CurrentVersion}). " +
+                          "Apply support coming in the next build.";
+        }
+        else if (result.LatestVersion == null)
+        {
+            status.Foreground = Avalonia.Media.Brushes.LightGray;
+            status.Text = "No releases published yet — you're on the development build.";
+        }
+        else
+        {
+            status.Foreground = Avalonia.Media.Brushes.LightGray;
+            status.Text = $"You're on the latest version ({result.CurrentVersion}).";
+        }
+
+        if (button != null) button.IsEnabled = true;
     }
 
     private void HideSettings()
