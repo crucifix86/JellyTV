@@ -521,16 +521,6 @@
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Stretch"/>
 
-        <!-- On-Screen Keyboard Overlay -->
-        <Border Name="KeyboardOverlay"
-                Grid.RowSpan="2"
-                IsVisible="False"
-                Background="#CC000000"
-                VerticalAlignment="Bottom"
-                HorizontalAlignment="Stretch">
-            <views:OnScreenKeyboard x:Name="OnScreenKeyboard"/>
-        </Border>
-
         <!-- Slide-out Sidebar -->
         <Border Name="SidebarOverlay"
                 Grid.RowSpan="2"
@@ -741,6 +731,130 @@
                                               Foreground="#FFCCCCCC"
                                               TextWrapping="Wrap"
                                               IsVisible="False"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Install to Disk Section -->
+                            <Border Name="InstallToDiskSection"
+                                    Background="#FF252525"
+                                    CornerRadius="8"
+                                    Padding="30"
+                                    IsVisible="False">
+                                <StackPanel Spacing="15">
+                                    <TextBlock Text="Install to Disk"
+                                              FontSize="32"
+                                              FontWeight="SemiBold"
+                                              Foreground="White"
+                                              Margin="0,0,0,10"/>
+                                    <TextBlock Text="JellyTV is running from removable media. Install to internal storage for faster boot and persistent settings."
+                                              FontSize="18"
+                                              Foreground="#FFCCCCCC"
+                                              TextWrapping="Wrap"/>
+                                    <Button Name="InstallToDiskButton"
+                                            Content="Install JellyTV…"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="24"
+                                            Padding="20,12"
+                                            Focusable="True"
+                                            IsTabStop="True"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Remote Access (SSH) Section -->
+                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
+                                <StackPanel Spacing="15">
+                                    <TextBlock Text="Remote Access"
+                                              FontSize="32"
+                                              FontWeight="SemiBold"
+                                              Foreground="White"
+                                              Margin="0,0,0,10"/>
+
+                                    <Button Name="SshToggleButton"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="24"
+                                            Padding="20,12"
+                                            Focusable="True"
+                                            IsTabStop="True">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0"
+                                                      Text="SSH server"
+                                                      VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1"
+                                                      Name="SshStatusBadge"
+                                                      Text="[ ]"
+                                                      FontSize="28"
+                                                      Margin="20,0,0,0"
+                                                      VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+
+                                    <TextBlock Name="SshHintLabel"
+                                              Text=""
+                                              FontSize="18"
+                                              Foreground="#FFCCCCCC"
+                                              TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- WiFi Section -->
+                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
+                                <StackPanel Spacing="15">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0"
+                                                  Text="WiFi"
+                                                  FontSize="32"
+                                                  FontWeight="SemiBold"
+                                                  Foreground="White"/>
+                                        <TextBlock Grid.Column="1"
+                                                  Name="WifiStatusLabel"
+                                                  Text=""
+                                                  FontSize="20"
+                                                  Foreground="#FFCCCCCC"
+                                                  VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Button Name="WifiScanButton"
+                                            Content="Scan for networks"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="24"
+                                            Padding="20,12"
+                                            Focusable="True"
+                                            IsTabStop="True"/>
+
+                                    <StackPanel Name="WifiNetworkList"
+                                               Spacing="8"
+                                               Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Bluetooth Section -->
+                            <Border Background="#FF252525" CornerRadius="8" Padding="30">
+                                <StackPanel Spacing="15">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0"
+                                                  Text="Bluetooth"
+                                                  FontSize="32"
+                                                  FontWeight="SemiBold"
+                                                  Foreground="White"/>
+                                        <TextBlock Grid.Column="1"
+                                                  Name="BluetoothStatusLabel"
+                                                  Text=""
+                                                  FontSize="20"
+                                                  Foreground="#FFCCCCCC"
+                                                  VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Button Name="BluetoothScanButton"
+                                            Content="Scan for devices"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="24"
+                                            Padding="20,12"
+                                            Focusable="True"
+                                            IsTabStop="True"/>
+
+                                    <StackPanel Name="BluetoothDeviceList"
+                                               Spacing="8"
+                                               Margin="0,5,0,0"/>
                                 </StackPanel>
                             </Border>
 
@@ -975,6 +1089,72 @@
                     </StackPanel>
                 </Border>
             </Grid>
+        </Border>
+
+        <!-- Install-to-disk Overlay -->
+        <Border Name="InstallOverlay"
+                Grid.RowSpan="2"
+                IsVisible="False"
+                Background="#DD000000">
+            <Border Background="#FF1A1A1A"
+                    CornerRadius="12"
+                    Padding="60"
+                    MaxWidth="900"
+                    MaxHeight="700"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Row="0"
+                              Name="InstallOverlayTitle"
+                              Text="Install JellyTV"
+                              FontSize="42"
+                              FontWeight="Bold"
+                              Foreground="White"
+                              HorizontalAlignment="Center"
+                              Margin="0,0,0,30"/>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Name="InstallContent" Spacing="15"/>
+                    </ScrollViewer>
+
+                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" Margin="0,30,0,0">
+                        <TextBlock Grid.Column="0"
+                                  Name="InstallStatusLabel"
+                                  Text=""
+                                  FontSize="18"
+                                  Foreground="#FFCCCCCC"
+                                  VerticalAlignment="Center"/>
+                        <Button Grid.Column="1"
+                                Name="InstallPrimaryButton"
+                                Content=""
+                                FontSize="22"
+                                Padding="30,12"
+                                Margin="0,0,10,0"
+                                Focusable="True"
+                                IsTabStop="True"
+                                IsVisible="False"/>
+                        <Button Grid.Column="2"
+                                Name="InstallCloseButton"
+                                Content="Close"
+                                FontSize="22"
+                                Padding="30,12"
+                                Focusable="True"
+                                IsTabStop="True"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Border>
+
+        <!-- On-Screen Keyboard Overlay — declared LAST so it renders above
+             every other overlay (Settings, Apps, etc.) when shown. Earlier
+             siblings paint behind later ones in Avalonia. -->
+        <Border Name="KeyboardOverlay"
+                Grid.RowSpan="2"
+                IsVisible="False"
+                Background="#CC000000"
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Stretch">
+            <views:OnScreenKeyboard x:Name="OnScreenKeyboard"/>
         </Border>
 
     </Grid>

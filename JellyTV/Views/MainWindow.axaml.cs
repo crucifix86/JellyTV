@@ -22,6 +22,24 @@ public partial class MainWindow : Window
     private VideoPlayerControl? _videoPlayerControl;
     private readonly AppLauncherService _appLauncher = new();
     private readonly UpdaterService _updater = new();
+    private readonly BluetoothService _bluetooth = new();
+    private bool _bluetoothBusy;
+    private readonly WiFiService _wifi = new();
+    private bool _wifiBusy;
+    private readonly SshService _ssh = new();
+    private bool _sshBusy;
+    private readonly InstallerService _installer = new();
+    private InstallTarget? _selectedInstallTarget;
+    private bool _installRunning;
+    private TaskCompletionSource<string?>? _keyboardPromptTcs;
+
+    /// <summary>
+    /// True when JellyTV is running on the appliance image (cage kiosk).
+    /// jellytv-launch sets JELLYTV_APPLIANCE=1 there. Used to hide UI
+    /// elements that only make sense on a desktop dev install.
+    /// </summary>
+    private static bool IsApplianceMode() =>
+        Environment.GetEnvironmentVariable("JELLYTV_APPLIANCE") == "1";
 
     public MainWindow()
     {
@@ -390,10 +408,15 @@ StartupNotify=false";
         // Don't hijack keys when a text field is being typed into (login screen, etc.).
         // The on-screen keyboard surfaces its own focus, so this only matters for
         // physical/remote keyboards driving a TextBox directly.
-        if (FocusManager?.GetFocusedElement() is TextBox)
+        if (FocusManager?.GetFocusedElement() is TextBox tb)
         {
-            // Escape still allowed through so back-out works even mid-type.
-            if (e.Key != Key.Escape) return;
+            // Escape always passes through (back-out mid-type).
+            // Left arrow at the start of the textbox also passes through so the
+            // "Left at edge opens sidebar" gesture works from the login screen,
+            // where the only focusable elements are TextBoxes.
+            var passThrough = e.Key == Key.Escape
+                              || (e.Key == Key.Left && tb.CaretIndex == 0);
+            if (!passThrough) return;
         }
 
         // If something downstream already handled it, don't re-act.
@@ -922,7 +945,20 @@ StartupNotify=false";
             return;
         }
 
+        // If we're rebinding to a different TextBox, drop the LostFocus
+        // handler from the previous one so we don't leak handlers.
+        if (_keyboardTargetTextBox != null && _keyboardTargetTextBox != targetTextBox)
+        {
+            _keyboardTargetTextBox.LostFocus -= OnKeyboardTargetLostFocus;
+        }
         _keyboardTargetTextBox = targetTextBox;
+
+        // Auto-hide the OSK when focus leaves the target — happens when the
+        // user types via a real keyboard and Tabs to the next field, or
+        // clicks Connect/Submit. Without this the OSK stays visible
+        // covering content even after the user is clearly done with it.
+        targetTextBox.LostFocus -= OnKeyboardTargetLostFocus;
+        targetTextBox.LostFocus += OnKeyboardTargetLostFocus;
 
         // Set the current text in the keyboard
         keyboard.CurrentText = targetTextBox.Text ?? "";
@@ -940,6 +976,20 @@ StartupNotify=false";
         keyboardOverlay.UpdateLayout();
 
         Console.WriteLine("On-screen keyboard shown");
+    }
+
+    private void OnKeyboardTargetLostFocus(object? sender, RoutedEventArgs e)
+    {
+        // Don't hide if focus moved INTO the on-screen keyboard itself
+        // (user is tapping its keys via mouse/gamepad).
+        var focused = FocusManager?.GetFocusedElement() as Visual;
+        var keyboardOverlay = this.FindControl<Border>("KeyboardOverlay");
+        if (focused != null && keyboardOverlay != null &&
+            (focused == keyboardOverlay || focused.GetVisualAncestors().Contains(keyboardOverlay)))
+        {
+            return;
+        }
+        HideOnScreenKeyboard();
     }
 
     private void OnKeyboardTextEntered(object? sender, string text)
@@ -969,6 +1019,9 @@ StartupNotify=false";
             var textBoxToFocus = _keyboardTargetTextBox;
             if (textBoxToFocus != null)
             {
+                // Drop the LostFocus hook so it doesn't fire when we
+                // re-focus or when the user navigates away later.
+                textBoxToFocus.LostFocus -= OnKeyboardTargetLostFocus;
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     textBoxToFocus?.Focus();
@@ -1047,8 +1100,17 @@ StartupNotify=false";
 
         if (showDesktopButton != null)
         {
-            showDesktopButton.Click -= OnShowDesktopButtonClick;
-            showDesktopButton.Click += OnShowDesktopButtonClick;
+            // No desktop to show on the appliance image (cage IS the entire
+            // session). jellytv-launch sets JELLYTV_APPLIANCE=1 there.
+            if (IsApplianceMode())
+            {
+                showDesktopButton.IsVisible = false;
+            }
+            else
+            {
+                showDesktopButton.Click -= OnShowDesktopButtonClick;
+                showDesktopButton.Click += OnShowDesktopButtonClick;
+            }
         }
 
         if (logoutButton != null)
@@ -1274,6 +1336,46 @@ StartupNotify=false";
             checkForUpdatesButton.Click += OnCheckForUpdatesClick;
         }
 
+        var bluetoothScanButton = this.FindControl<Button>("BluetoothScanButton");
+        if (bluetoothScanButton != null)
+        {
+            bluetoothScanButton.Click -= OnBluetoothScanClick;
+            bluetoothScanButton.Click += OnBluetoothScanClick;
+        }
+
+        var wifiScanButton = this.FindControl<Button>("WifiScanButton");
+        if (wifiScanButton != null)
+        {
+            wifiScanButton.Click -= OnWifiScanClick;
+            wifiScanButton.Click += OnWifiScanClick;
+        }
+
+        var sshToggleButton = this.FindControl<Button>("SshToggleButton");
+        if (sshToggleButton != null)
+        {
+            sshToggleButton.Click -= OnSshToggleClick;
+            sshToggleButton.Click += OnSshToggleClick;
+        }
+
+        // "Install to Disk" only makes sense when running from a live ISO.
+        // The live-boot package mounts the source at /run/live/medium; if
+        // that mountpoint exists we're live, otherwise we're already on disk.
+        var installSection = this.FindControl<Border>("InstallToDiskSection");
+        var installToDiskButton = this.FindControl<Button>("InstallToDiskButton");
+        var isLive = Directory.Exists("/run/live/medium");
+        if (installSection != null) installSection.IsVisible = isLive;
+        if (installToDiskButton != null)
+        {
+            installToDiskButton.Click -= OnInstallToDiskClick;
+            installToDiskButton.Click += OnInstallToDiskClick;
+        }
+
+        // Show currently paired devices, active WiFi connection, and SSH
+        // status immediately on open — saves the user a click.
+        _ = RefreshBluetoothListAsync(scanFirst: false);
+        _ = RefreshWifiCurrentStatusAsync();
+        _ = RefreshSshStatusAsync();
+
         if (updateStatusLabel != null)
         {
             updateStatusLabel.IsVisible = false;
@@ -1333,6 +1435,668 @@ StartupNotify=false";
         }
 
         if (button != null) button.IsEnabled = true;
+    }
+
+    private async void OnBluetoothScanClick(object? sender, RoutedEventArgs e)
+    {
+        await RefreshBluetoothListAsync(scanFirst: true);
+    }
+
+    private async Task RefreshBluetoothListAsync(bool scanFirst)
+    {
+        if (_bluetoothBusy) return;
+
+        var statusLabel = this.FindControl<TextBlock>("BluetoothStatusLabel");
+        var scanButton = this.FindControl<Button>("BluetoothScanButton");
+        var listPanel = this.FindControl<StackPanel>("BluetoothDeviceList");
+        if (listPanel == null) return;
+
+        _bluetoothBusy = true;
+        if (scanButton != null) scanButton.IsEnabled = false;
+
+        try
+        {
+            if (scanFirst)
+            {
+                if (statusLabel != null) statusLabel.Text = "Scanning…";
+                await _bluetooth.PowerOnBluetoothAsync();
+                await _bluetooth.StartScanAsync();
+                // bluetoothctl scan results trickle in over a few seconds;
+                // give it a window before snapshotting the device list.
+                await Task.Delay(6000);
+                await _bluetooth.StopScanAsync();
+            }
+            else
+            {
+                if (statusLabel != null) statusLabel.Text = "";
+            }
+
+            var devices = await _bluetooth.GetDevicesAsync();
+            RenderBluetoothDevices(listPanel, devices);
+
+            if (statusLabel != null)
+            {
+                statusLabel.Text = devices.Count == 0
+                    ? "No devices found"
+                    : $"{devices.Count(d => d.IsPaired)} paired, {devices.Count} total";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (statusLabel != null)
+            {
+                statusLabel.Foreground = Avalonia.Media.Brushes.OrangeRed;
+                statusLabel.Text = $"Error: {ex.Message}";
+            }
+        }
+        finally
+        {
+            _bluetoothBusy = false;
+            if (scanButton != null) scanButton.IsEnabled = true;
+        }
+    }
+
+    private void RenderBluetoothDevices(StackPanel container, IEnumerable<BluetoothDevice> devices)
+    {
+        container.Children.Clear();
+
+        // Paired first so users see their remote at the top of the list.
+        var ordered = devices
+            .OrderByDescending(d => d.IsConnected)
+            .ThenByDescending(d => d.IsPaired)
+            .ThenBy(d => d.Name);
+
+        foreach (var device in ordered)
+        {
+            container.Children.Add(BuildBluetoothRow(device));
+        }
+    }
+
+    private Border BuildBluetoothRow(BluetoothDevice device)
+    {
+        var nameText = new TextBlock
+        {
+            Text = string.IsNullOrWhiteSpace(device.Name) ? device.Address : device.Name,
+            FontSize = 22,
+            Foreground = Avalonia.Media.Brushes.White,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        var statusBits = new List<string>();
+        if (device.IsConnected) statusBits.Add("connected");
+        else if (device.IsPaired) statusBits.Add("paired");
+        if (!string.IsNullOrEmpty(device.DeviceType) && device.DeviceType != "Unknown")
+            statusBits.Add(device.DeviceType.ToLowerInvariant());
+        var statusText = new TextBlock
+        {
+            Text = string.Join(" · ", statusBits),
+            FontSize = 16,
+            Foreground = Avalonia.Media.Brushes.LightGray,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        var actionButton = new Button
+        {
+            Content = device.IsPaired ? "Forget" : "Pair",
+            FontSize = 20,
+            Padding = new Avalonia.Thickness(20, 8),
+            Focusable = true,
+            IsTabStop = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        var address = device.Address; // capture for closure
+        var isPaired = device.IsPaired;
+        actionButton.Click += async (_, _) =>
+        {
+            actionButton.IsEnabled = false;
+            actionButton.Content = isPaired ? "Forgetting…" : "Pairing…";
+            try
+            {
+                if (isPaired)
+                {
+                    await _bluetooth.UnpairDeviceAsync(address);
+                }
+                else
+                {
+                    await _bluetooth.PairDeviceAsync(address);
+                }
+            }
+            finally
+            {
+                await RefreshBluetoothListAsync(scanFirst: false);
+            }
+        };
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
+        var labelStack = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Vertical,
+            Spacing = 2,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        labelStack.Children.Add(nameText);
+        if (statusBits.Count > 0) labelStack.Children.Add(statusText);
+        Grid.SetColumn(labelStack, 0);
+        grid.Children.Add(labelStack);
+
+        var addressText = new TextBlock
+        {
+            Text = device.Address,
+            FontSize = 14,
+            Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FF888888")),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Avalonia.Thickness(0, 0, 20, 0),
+        };
+        Grid.SetColumn(addressText, 1);
+        grid.Children.Add(addressText);
+
+        Grid.SetColumn(actionButton, 2);
+        grid.Children.Add(actionButton);
+
+        return new Border
+        {
+            Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FF1F1F1F")),
+            CornerRadius = new Avalonia.CornerRadius(6),
+            Padding = new Avalonia.Thickness(16, 10),
+            Child = grid,
+        };
+    }
+
+    private async void OnWifiScanClick(object? sender, RoutedEventArgs e)
+    {
+        await RefreshWifiListAsync();
+    }
+
+    private async Task RefreshWifiCurrentStatusAsync()
+    {
+        var statusLabel = this.FindControl<TextBlock>("WifiStatusLabel");
+        if (statusLabel == null) return;
+        try
+        {
+            var current = await _wifi.GetCurrentSsidAsync();
+            statusLabel.Text = string.IsNullOrEmpty(current) ? "Not connected" : $"On {current}";
+        }
+        catch (Exception ex)
+        {
+            statusLabel.Text = $"({ex.Message})";
+        }
+    }
+
+    private async Task RefreshWifiListAsync()
+    {
+        if (_wifiBusy) return;
+
+        var statusLabel = this.FindControl<TextBlock>("WifiStatusLabel");
+        var scanButton = this.FindControl<Button>("WifiScanButton");
+        var listPanel = this.FindControl<StackPanel>("WifiNetworkList");
+        if (listPanel == null) return;
+
+        _wifiBusy = true;
+        if (scanButton != null) scanButton.IsEnabled = false;
+        if (statusLabel != null) statusLabel.Text = "Scanning…";
+
+        try
+        {
+            var networks = await _wifi.ScanAsync();
+            RenderWifiNetworks(listPanel, networks);
+            await RefreshWifiCurrentStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            if (statusLabel != null)
+            {
+                statusLabel.Foreground = Avalonia.Media.Brushes.OrangeRed;
+                statusLabel.Text = $"Error: {ex.Message}";
+            }
+        }
+        finally
+        {
+            _wifiBusy = false;
+            if (scanButton != null) scanButton.IsEnabled = true;
+        }
+    }
+
+    private void RenderWifiNetworks(StackPanel container, IEnumerable<WiFiNetwork> networks)
+    {
+        container.Children.Clear();
+        foreach (var net in networks)
+        {
+            container.Children.Add(BuildWifiRow(net));
+        }
+    }
+
+    private Border BuildWifiRow(WiFiNetwork net)
+    {
+        var lockGlyph = net.IsSecured ? "🔒 " : "";
+        var nameText = new TextBlock
+        {
+            Text = $"{lockGlyph}{net.Ssid}",
+            FontSize = 22,
+            Foreground = Avalonia.Media.Brushes.White,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        var detail = new List<string>();
+        if (net.InUse) detail.Add("connected");
+        detail.Add($"{net.SignalStrength}%");
+        if (!string.IsNullOrEmpty(net.Security) && net.Security != "--") detail.Add(net.Security);
+        var detailText = new TextBlock
+        {
+            Text = string.Join(" · ", detail),
+            FontSize = 16,
+            Foreground = Avalonia.Media.Brushes.LightGray,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        var actionButton = new Button
+        {
+            Content = net.InUse ? "Disconnect" : "Connect",
+            FontSize = 20,
+            Padding = new Avalonia.Thickness(20, 8),
+            Focusable = true,
+            IsTabStop = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        var ssid = net.Ssid;        // capture
+        var isSecured = net.IsSecured;
+        var inUse = net.InUse;
+
+        actionButton.Click += async (_, _) =>
+        {
+            actionButton.IsEnabled = false;
+            try
+            {
+                if (inUse)
+                {
+                    actionButton.Content = "Disconnecting…";
+                    await _wifi.DisconnectAsync();
+                }
+                else
+                {
+                    string? password = null;
+                    if (isSecured)
+                    {
+                        password = await PromptForTextAsync();
+                        if (password == null) return;   // user cancelled
+                    }
+                    actionButton.Content = "Connecting…";
+                    var (ok, msg) = await _wifi.ConnectAsync(ssid, password);
+                    if (!ok)
+                    {
+                        var statusLabel = this.FindControl<TextBlock>("WifiStatusLabel");
+                        if (statusLabel != null)
+                        {
+                            statusLabel.Foreground = Avalonia.Media.Brushes.OrangeRed;
+                            statusLabel.Text = msg.Length > 80 ? msg.Substring(0, 80) + "…" : msg;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                await RefreshWifiListAsync();
+            }
+        };
+
+        var labelStack = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Vertical,
+            Spacing = 2,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        labelStack.Children.Add(nameText);
+        labelStack.Children.Add(detailText);
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        Grid.SetColumn(labelStack, 0);
+        grid.Children.Add(labelStack);
+        Grid.SetColumn(actionButton, 1);
+        grid.Children.Add(actionButton);
+
+        return new Border
+        {
+            Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FF1F1F1F")),
+            CornerRadius = new Avalonia.CornerRadius(6),
+            Padding = new Avalonia.Thickness(16, 10),
+            Child = grid,
+        };
+    }
+
+    private async void OnSshToggleClick(object? sender, RoutedEventArgs e)
+    {
+        if (_sshBusy) return;
+        _sshBusy = true;
+        var button = sender as Button;
+        if (button != null) button.IsEnabled = false;
+        try
+        {
+            var status = await _ssh.GetStatusAsync();
+            if (status.IsRunning || status.IsEnabledOnBoot)
+            {
+                await _ssh.DisableAsync();
+            }
+            else
+            {
+                await _ssh.EnableAsync();
+            }
+            await RefreshSshStatusAsync();
+        }
+        finally
+        {
+            _sshBusy = false;
+            if (button != null) button.IsEnabled = true;
+        }
+    }
+
+    private async Task RefreshSshStatusAsync()
+    {
+        var badge = this.FindControl<TextBlock>("SshStatusBadge");
+        var hint = this.FindControl<TextBlock>("SshHintLabel");
+        if (badge == null) return;
+
+        var status = await _ssh.GetStatusAsync();
+        badge.Text = status.IsRunning ? "[X]" : "[ ]";
+
+        if (hint != null)
+        {
+            if (status.IsRunning)
+            {
+                var ip = SshService.GetLocalIp();
+                hint.Text = ip != null
+                    ? $"ssh jellytv@{ip}   (password: jellytv)"
+                    : "Running — no IPv4 address detected";
+            }
+            else
+            {
+                hint.Text = "Disabled — turn on for remote shell access during troubleshooting.";
+            }
+        }
+    }
+
+    private async void OnInstallToDiskClick(object? sender, RoutedEventArgs e)
+    {
+        HideSettings();
+        await ShowInstallTargetPickerAsync();
+    }
+
+    private async Task ShowInstallTargetPickerAsync()
+    {
+        var overlay = this.FindControl<Border>("InstallOverlay");
+        var content = this.FindControl<StackPanel>("InstallContent");
+        var title = this.FindControl<TextBlock>("InstallOverlayTitle");
+        var primary = this.FindControl<Button>("InstallPrimaryButton");
+        var status = this.FindControl<TextBlock>("InstallStatusLabel");
+        var close = this.FindControl<Button>("InstallCloseButton");
+        if (overlay == null || content == null) return;
+
+        title!.Text = "Choose Install Target";
+        primary!.IsVisible = false;
+        status!.Text = "";
+        close!.Click -= OnInstallCloseClick;
+        close.Click += OnInstallCloseClick;
+
+        content.Children.Clear();
+        content.Children.Add(new TextBlock
+        {
+            Text = "Scanning for disks…",
+            FontSize = 20,
+            Foreground = Avalonia.Media.Brushes.LightGray,
+        });
+
+        overlay.IsVisible = true;
+        overlay.UpdateLayout();
+
+        var targets = await _installer.ListTargetsAsync();
+
+        content.Children.Clear();
+        if (targets.Count == 0)
+        {
+            content.Children.Add(new TextBlock
+            {
+                Text = "No disks found.",
+                FontSize = 20,
+                Foreground = Avalonia.Media.Brushes.LightGray,
+            });
+            close.Focus();
+            return;
+        }
+
+        foreach (var t in targets)
+        {
+            content.Children.Add(BuildInstallTargetRow(t));
+        }
+    }
+
+    private Border BuildInstallTargetRow(InstallTarget target)
+    {
+        var liveBadge = target.IsLiveSource ? "  (live USB — cannot install here)" : "";
+        var modelLine = string.IsNullOrWhiteSpace(target.Model) ? target.Transport : $"{target.Model.Trim()} · {target.Transport}";
+
+        var labels = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Vertical,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Spacing = 4,
+        };
+        labels.Children.Add(new TextBlock
+        {
+            Text = $"{target.Device}  {target.SizeHuman}{liveBadge}",
+            FontSize = 24,
+            Foreground = Avalonia.Media.Brushes.White,
+        });
+        labels.Children.Add(new TextBlock
+        {
+            Text = modelLine,
+            FontSize = 16,
+            Foreground = Avalonia.Media.Brushes.LightGray,
+        });
+
+        var button = new Button
+        {
+            Content = target.IsLiveSource ? "Source — skip" : "Select",
+            FontSize = 20,
+            Padding = new Avalonia.Thickness(20, 10),
+            Focusable = true,
+            IsTabStop = !target.IsLiveSource,
+            IsEnabled = !target.IsLiveSource,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        var captured = target;
+        button.Click += async (_, _) => await ShowInstallConfirmAsync(captured);
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        Grid.SetColumn(labels, 0);
+        Grid.SetColumn(button, 1);
+        grid.Children.Add(labels);
+        grid.Children.Add(button);
+
+        return new Border
+        {
+            Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FF1F1F1F")),
+            CornerRadius = new Avalonia.CornerRadius(6),
+            Padding = new Avalonia.Thickness(20, 14),
+            Child = grid,
+        };
+    }
+
+    private async Task ShowInstallConfirmAsync(InstallTarget target)
+    {
+        _selectedInstallTarget = target;
+        var content = this.FindControl<StackPanel>("InstallContent");
+        var title = this.FindControl<TextBlock>("InstallOverlayTitle");
+        var primary = this.FindControl<Button>("InstallPrimaryButton");
+        if (content == null || title == null || primary == null) return;
+
+        title.Text = "Confirm";
+        content.Children.Clear();
+        content.Children.Add(new TextBlock
+        {
+            Text = $"Install JellyTV to {target.Device} ({target.SizeHuman}, {target.Model.Trim()})?",
+            FontSize = 24,
+            Foreground = Avalonia.Media.Brushes.White,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = "Everything on this disk will be erased.",
+            FontSize = 20,
+            Foreground = Avalonia.Media.Brushes.OrangeRed,
+            Margin = new Avalonia.Thickness(0, 10, 0, 0),
+        });
+
+        primary.Content = "Erase and install";
+        primary.IsVisible = true;
+        primary.Click -= OnInstallConfirmClick;
+        primary.Click += OnInstallConfirmClick;
+        primary.Focus();
+        await Task.CompletedTask;
+    }
+
+    private async void OnInstallConfirmClick(object? sender, RoutedEventArgs e)
+    {
+        if (_selectedInstallTarget == null || _installRunning) return;
+        _installRunning = true;
+
+        var content = this.FindControl<StackPanel>("InstallContent");
+        var title = this.FindControl<TextBlock>("InstallOverlayTitle");
+        var primary = this.FindControl<Button>("InstallPrimaryButton");
+        var status = this.FindControl<TextBlock>("InstallStatusLabel");
+        var close = this.FindControl<Button>("InstallCloseButton");
+        if (content == null || title == null || primary == null) return;
+
+        title.Text = $"Installing to {_selectedInstallTarget.Device}";
+        primary.IsVisible = false;
+        if (close != null) close.IsEnabled = false;
+        if (status != null) status.Text = "Working…";
+
+        content.Children.Clear();
+        var log = new TextBlock
+        {
+            FontFamily = new Avalonia.Media.FontFamily("Monospace"),
+            FontSize = 14,
+            Foreground = Avalonia.Media.Brushes.LightGray,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        };
+        content.Children.Add(log);
+
+        var lines = new List<string>();
+        void OnLine(string line) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                lines.Add(line);
+                // Keep the visible log bounded so a huge rsync transfer doesn't
+                // turn into a giant TextBlock that blows up the renderer.
+                if (lines.Count > 200) lines.RemoveRange(0, lines.Count - 200);
+                log.Text = string.Join("\n", lines);
+            });
+
+        _installer.ProgressLine -= OnLine;
+        _installer.ProgressLine += OnLine;
+
+        var ok = await _installer.InstallAsync(_selectedInstallTarget.Device);
+
+        _installer.ProgressLine -= OnLine;
+        _installRunning = false;
+        if (close != null) close.IsEnabled = true;
+
+        if (ok)
+        {
+            if (status != null)
+            {
+                status.Foreground = Avalonia.Media.Brushes.LightGreen;
+                status.Text = "Install complete. Reboot to use the new install.";
+            }
+            primary.Content = "Reboot now";
+            primary.IsVisible = true;
+            primary.Click -= OnInstallConfirmClick;
+            primary.Click -= OnInstallRebootClick;
+            primary.Click += OnInstallRebootClick;
+            primary.Focus();
+        }
+        else
+        {
+            if (status != null)
+            {
+                status.Foreground = Avalonia.Media.Brushes.OrangeRed;
+                status.Text = "Install failed. See log above.";
+            }
+        }
+    }
+
+    private async void OnInstallRebootClick(object? sender, RoutedEventArgs e)
+    {
+        await InstallerService.RebootAsync();
+    }
+
+    private void OnInstallCloseClick(object? sender, RoutedEventArgs e)
+    {
+        if (_installRunning) return;
+        var overlay = this.FindControl<Border>("InstallOverlay");
+        if (overlay != null) overlay.IsVisible = false;
+        _selectedInstallTarget = null;
+    }
+
+    /// <summary>
+    /// Shows the on-screen keyboard and resolves with whatever the user
+    /// types when they hit Enter on it (or null if they dismiss). Used by
+    /// WiFi password entry — anywhere we need a remote-friendly text prompt
+    /// without binding to a real TextBox.
+    /// </summary>
+    private Task<string?> PromptForTextAsync(string initial = "")
+    {
+        var keyboardOverlay = this.FindControl<Border>("KeyboardOverlay");
+        var keyboard = this.FindControl<OnScreenKeyboard>("OnScreenKeyboard");
+        if (keyboardOverlay == null || keyboard == null)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        // If a prompt is already pending, cancel it.
+        _keyboardPromptTcs?.TrySetResult(null);
+
+        _keyboardPromptTcs = new TaskCompletionSource<string?>();
+        // Important: clear the textbox-target path so OnKeyboardTextEntered
+        // doesn't try to write into the login screen's TextBox.
+        _keyboardTargetTextBox = null;
+
+        keyboard.CurrentText = initial;
+        keyboard.TextEntered -= OnKeyboardTextEntered;
+        keyboard.Dismissed -= OnKeyboardDismissed;
+        keyboard.TextEntered -= OnPromptTextEntered;
+        keyboard.Dismissed -= OnPromptDismissed;
+        keyboard.TextEntered += OnPromptTextEntered;
+        keyboard.Dismissed += OnPromptDismissed;
+
+        keyboardOverlay.IsVisible = true;
+        keyboardOverlay.UpdateLayout();
+        return _keyboardPromptTcs.Task;
+    }
+
+    private void OnPromptTextEntered(object? sender, string text)
+    {
+        var tcs = _keyboardPromptTcs;
+        _keyboardPromptTcs = null;
+        if (sender is OnScreenKeyboard k)
+        {
+            k.TextEntered -= OnPromptTextEntered;
+            k.Dismissed -= OnPromptDismissed;
+        }
+        HideOnScreenKeyboard();
+        tcs?.TrySetResult(text);
+    }
+
+    private void OnPromptDismissed(object? sender, EventArgs e)
+    {
+        var tcs = _keyboardPromptTcs;
+        _keyboardPromptTcs = null;
+        if (sender is OnScreenKeyboard k)
+        {
+            k.TextEntered -= OnPromptTextEntered;
+            k.Dismissed -= OnPromptDismissed;
+        }
+        HideOnScreenKeyboard();
+        tcs?.TrySetResult(null);
     }
 
     private void HideSettings()
