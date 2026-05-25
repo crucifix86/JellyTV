@@ -27,7 +27,7 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
     <PackageReference Include="System.Net.Http.Json" Version="9.0.10" />
-    <PackageReference Include="FFmpeg.AutoGen" Version="8.1.0" />
+    <PackageReference Include="FFmpeg.AutoGen" Version="7.1.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="OpenTK.Audio.OpenAL" Version="4.9.4" />
   </ItemGroup>

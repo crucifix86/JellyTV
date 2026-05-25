@@ -185,11 +185,7 @@ public unsafe class VideoCodec : IDisposable
         {
             // Use high quality scaling with proper color space handling
             // SWS_BICUBIC gives better quality than BILINEAR for YUV->RGB conversion
-            // Constants removed from FFmpeg.AutoGen 8.x — values are stable in libswscale.
-            const int SWS_BICUBIC = 4;
-            const int SWS_FULL_CHR_H_INT = 0x2000;
-            const int SWS_ACCURATE_RND = 0x40000;
-            int flags = SWS_BICUBIC | SWS_FULL_CHR_H_INT | SWS_ACCURATE_RND;
+            int flags = ffmpeg.SWS_BICUBIC | ffmpeg.SWS_FULL_CHR_H_INT | ffmpeg.SWS_ACCURATE_RND;
 
             _swsContext = ffmpeg.sws_getContext(
                 frameToConvert->width, frameToConvert->height, (AVPixelFormat)frameToConvert->format,
