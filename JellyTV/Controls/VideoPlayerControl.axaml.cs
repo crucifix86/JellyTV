@@ -327,15 +327,28 @@ public partial class VideoPlayerControl : UserControl, INotifyPropertyChanged, I
         if (_videoImage == null)
             return;
 
+        // Snapshot the data reference upfront. VideoFrame.ReturnBuffer() can
+        // race with us and reassign frame.Data to Array.Empty<byte>() mid-render
+        // (it does so when returning the buffer to the pool). If we read
+        // frame.Data more than once below — once to fix it under `fixed`, once
+        // when src + y*Stride dereferences — we'd segfault on the dereference
+        // even though we made it past the null/empty check.
+        var data = frame.Data;
+        var stride = frame.Stride;
+        var width = frame.Width;
+        var height = frame.Height;
+        if (data == null || data.Length == 0)
+            return;
+
         // Create or update WriteableBitmap
-        if (_videoBitmap == null || _videoBitmap.PixelSize.Width != frame.Width || _videoBitmap.PixelSize.Height != frame.Height)
+        if (_videoBitmap == null || _videoBitmap.PixelSize.Width != width || _videoBitmap.PixelSize.Height != height)
         {
             _videoBitmap = new WriteableBitmap(
-                new PixelSize(frame.Width, frame.Height),
+                new PixelSize(width, height),
                 new Vector(96, 96),
                 Avalonia.Platform.PixelFormat.Bgra8888);
 
-            Console.WriteLine($"Created bitmap {frame.Width}x{frame.Height}, Image bounds: {_videoImage.Bounds}, Parent bounds: {this.Bounds}");
+            Console.WriteLine($"Created bitmap {width}x{height}, Image bounds: {_videoImage.Bounds}, Parent bounds: {this.Bounds}");
         }
 
         using (var buffer = _videoBitmap.Lock())
@@ -343,16 +356,16 @@ public partial class VideoPlayerControl : UserControl, INotifyPropertyChanged, I
             unsafe
             {
                 var dst = (byte*)buffer.Address;
-                fixed (byte* src = frame.Data)
+                fixed (byte* src = data)
                 {
                     // Copy frame data to bitmap
-                    for (int y = 0; y < frame.Height; y++)
+                    for (int y = 0; y < height; y++)
                     {
                         Buffer.MemoryCopy(
-                            src + (y * frame.Stride),
+                            src + (y * stride),
                             dst + (y * buffer.RowBytes),
                             buffer.RowBytes,
-                            Math.Min(frame.Stride, buffer.RowBytes));
+                            Math.Min(stride, buffer.RowBytes));
                     }
                 }
             }
